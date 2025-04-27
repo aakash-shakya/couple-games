@@ -91,9 +91,46 @@
                         console.log('Connected to game server');
                         this.turnStatus = 'Connected. Waiting for game start...';
                         this.error = ''; // Clear connection error on successful connect
-                        // Request player number confirmation upon connection/reconnection
+                        // Emit joinRoom event to join the room on connection
+                        if (this.roomCode) {
+                            this.socket.emit('joinRoom', { roomCode: this.roomCode });
+                        } else {
+                            this.error = 'No room code specified in URL.';
+                        }
+                    });
+
+                    // Listen for join confirmation
+                    this.socket.on('joined', ({ roomCode, playerNumber }) => {
+                        console.log(`Joined room: ${roomCode}, you are Player ${playerNumber}`);
+                        this.roomCode = roomCode;
+                        // Only set playerNumber if not already set to avoid overwriting
+                        if (!this.playerNumber) {
+                            this.playerNumber = playerNumber;
+                        }
                         this.socket.emit('getPlayerNumber', { roomCode: this.roomCode });
                     });
+
+                    this.socket.on('playerNumberInfo', ({ number }) => {
+                        if (number) {
+                            // Only update playerNumber if not already set or different
+                            if (!this.playerNumber || this.playerNumber !== number) {
+                                this.playerNumber = number;
+                                console.log(`Confirmed as Player ${this.playerNumber}`);
+                            }
+                            // Update status if waiting for player number
+                            if (this.turnStatus.includes('Connecting') || this.turnStatus.includes('Waiting for player')) {
+                                this.turnStatus = 'Waiting for game start...';
+                            }
+                        } else {
+                            // Handle case where server doesn't know this socket in this room
+                            console.error("Could not verify player status for room:", this.roomCode);
+                            this.error = "Could not verify player status. Try rejoining the room.";
+                            this.turnStatus = 'Error';
+                            // Maybe redirect: window.location.href = '/join.html';
+                        }
+                    });
+
+                    // Remove roomCreated handler since play.html does not create rooms
 
                      this.socket.on('playerNumberInfo', ({ number }) => {
                          if (number) {
@@ -133,25 +170,35 @@
                     });
 
                     this.socket.on('yourTurn', ({ challenge }) => {
-                        console.log('My turn:', challenge);
-                        this.currentChallenge = this.formatChallenge(challenge);
-                        this.isMyTurn = true;
-                        this.turnStatus = "💖 Your Turn! 💖";
-                        this.status = ''; // Clear previous status
-                        this.error = '';
-                        this.partnerStatus = ''; // Clear partner status
-                        this.triggerFadeIn(); // Trigger animation
+                        try {
+                            console.log('My turn:', challenge);
+                            this.currentChallenge = this.formatChallenge(challenge);
+                            this.isMyTurn = true;
+                            this.turnStatus = "💖 Your Turn! 💖";
+                            this.status = ''; // Clear previous status
+                            this.error = '';
+                            this.partnerStatus = ''; // Clear partner status
+                            this.triggerFadeIn(); // Trigger animation
+                        } catch (error) {
+                            console.error('Error processing yourTurn challenge:', error);
+                            this.error = 'Error processing challenge.';
+                        }
                     });
 
                     this.socket.on('opponentTurn', ({ challenge }) => {
-                        console.log("Opponent's turn:", challenge);
-                        this.currentChallenge = this.formatChallenge(challenge);
-                        this.isMyTurn = false;
-                        this.turnStatus = "Partner's Turn... 🤔";
-                        this.status = '';
-                        this.error = '';
-                        // Don't clear partnerStatus here, it might have just been set by opponentAction
-                        this.triggerFadeIn(); // Trigger animation
+                        try {
+                            console.log("Opponent's turn:", challenge);
+                            this.currentChallenge = this.formatChallenge(challenge);
+                            this.isMyTurn = false;
+                            this.turnStatus = "Partner's Turn... 🤔";
+                            this.status = '';
+                            this.error = '';
+                            // Don't clear partnerStatus here, it might have just been set by opponentAction
+                            this.triggerFadeIn(); // Trigger animation
+                        } catch (error) {
+                            console.error('Error processing opponentTurn challenge:', error);
+                            this.error = 'Error processing challenge.';
+                        }
                     });
 
                      this.socket.on('opponentAction', ({ action }) => {
@@ -190,6 +237,22 @@
                         this.turnStatus = 'Disconnected';
                         this.isMyTurn = false; // Cannot act while disconnected
                         // Alpine.js will automatically try to reconnect via Socket.IO client library
+                    });
+
+                    this.socket.on('error', (error) => {
+                        console.error('Socket error:', error);
+                    });
+
+                    this.socket.io.on('reconnect_attempt', (attempt) => {
+                        console.log(`Reconnection attempt #${attempt}`);
+                    });
+
+                    this.socket.io.on('reconnect_failed', () => {
+                        console.error('Reconnection failed');
+                    });
+
+                    this.socket.io.on('reconnect_error', (error) => {
+                        console.error('Reconnection error:', error);
                     });
                 },
 

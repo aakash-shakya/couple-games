@@ -68,13 +68,15 @@
 
                      this.socket.on('gameStarted', ({ gameType }) => {
                         console.log(`Game started by Player 1 with type: ${gameType}`);
-                        // Redirect to the play screen
-                         if (this.joinedRoomCode) {
-                            window.location.href = `/play/${this.joinedRoomCode}`;
-                         } else {
-                             console.error("Game started but room code not stored on client.");
-                             this.error = "Error starting game. Please try again.";
-                         }
+                        // Delay navigation to the play screen to ensure room readiness
+                        if (this.joinedRoomCode) {
+                            setTimeout(() => {
+                                window.location.href = `/play/${this.joinedRoomCode}`;
+                            }, 1000); // 1 second delay
+                        } else {
+                            console.error("Game started but room code not stored on client.");
+                            this.error = "Error starting game. Please try again.";
+                        }
                     });
 
                     this.socket.on('error', ({ message }) => {

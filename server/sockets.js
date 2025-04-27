@@ -10,21 +10,21 @@ export function setupSocketHandlers(httpServer) {
     }
   });
 
-  io.on('connection', (socket) => {
-    console.log(`User connected: ${socket.id}`);
+    io.on('connection', (socket) => {
+      console.log(`User connected: ${socket.id}`);
 
-    // Create Room
-    socket.on('createRoom', () => {
-      try {
-        const roomData = createRoom(socket.id);
-        socket.join(roomData.roomCode);
-        socket.emit('roomCreated', { roomCode: roomData.roomCode, playerNumber: 1 });
-        console.log(`Socket ${socket.id} created and joined room ${roomData.roomCode} as Player 1`);
-      } catch (error) {
-        console.error("Error creating room:", error);
-        socket.emit('error', { message: 'Failed to create room.' });
-      }
-    });
+      // Create Room
+      socket.on('createRoom', () => {
+        try {
+          const roomData = createRoom(socket.id);
+          socket.join(roomData.roomCode);
+          socket.emit('roomCreated', { roomCode: roomData.roomCode, playerNumber: 1 });
+          console.log(`Socket ${socket.id} created and joined room ${roomData.roomCode} as Player 1`);
+        } catch (error) {
+          console.error("Error creating room:", error);
+          socket.emit('error', { message: 'Failed to create room.' });
+        }
+      });
 
     // Join Room
     socket.on('joinRoom', ({ roomCode }) => {
@@ -37,8 +37,11 @@ export function setupSocketHandlers(httpServer) {
 
         const room = result.room;
         socket.join(roomCode);
-        socket.emit('joined', { roomCode: room.roomCode, playerNumber: room.players.length });
-        console.log(`Socket ${socket.id} joined room ${roomCode} as Player ${room.players.length}`);
+        // Assign player number based on index in players array
+        const playerIndex = room.players.indexOf(socket.id);
+        const playerNumber = playerIndex + 1;
+        socket.emit('joined', { roomCode: room.roomCode, playerNumber });
+        console.log(`Socket ${socket.id} joined room ${roomCode} as Player ${playerNumber}`);
 
         // Notify both players that the game can start
         if (room.players.length === 2) {
@@ -50,6 +53,26 @@ export function setupSocketHandlers(httpServer) {
         socket.emit('error', { message: 'Failed to join room.' });
       }
     });
+
+      // Get Player Number
+      socket.on('getPlayerNumber', ({ roomCode }) => {
+        console.log(`Received getPlayerNumber from socket ${socket.id} for room ${roomCode}`);
+        const room = getRoom(roomCode);
+        if (!room) {
+          console.log(`Room ${roomCode} not found for socket ${socket.id}`);
+          socket.emit('playerNumberInfo', { number: null });
+          return;
+        }
+        const playerIndex = room.players.indexOf(socket.id);
+        if (playerIndex === -1) {
+          console.log(`Socket ${socket.id} not found in room ${roomCode}`);
+          socket.emit('playerNumberInfo', { number: null });
+          return;
+        }
+        const playerNumber = playerIndex + 1;
+        console.log(`Emitting playerNumberInfo to socket ${socket.id}: Player ${playerNumber}`);
+        socket.emit('playerNumberInfo', { number: playerNumber });
+      });
 
     // Start Game
     socket.on('startGame', async ({ gameType }) => {
@@ -64,6 +87,9 @@ export function setupSocketHandlers(httpServer) {
         }
 
         console.log(`Starting game type ${gameType} in room ${room.roomCode}`);
+        console.log(`Players in room: ${room.players.join(', ')}`);
+        console.log(`Current socket id: ${socket.id}`);
+
         updateGameState(room.roomCode, { gameType: gameType, round: 1, turn: 0 }); // Player 1 starts
 
         // Fetch first challenge
@@ -92,6 +118,9 @@ export function setupSocketHandlers(httpServer) {
         }
 
         console.log(`Player ${socket.id} performed action: ${action} in room ${room.roomCode}`);
+        console.log(`Players in room: ${room.players.join(', ')}`);
+        console.log(`Current socket id: ${socket.id}`);
+
         // Notify opponent about the action (optional, depending on game flow)
         const opponentSocketId = room.players.find(pId => pId !== socket.id);
         if (opponentSocketId) {
@@ -113,8 +142,8 @@ export function setupSocketHandlers(httpServer) {
 
 
     // Disconnect
-    socket.on('disconnect', () => {
-      console.log(`User disconnected: ${socket.id}`);
+    socket.on('disconnect', (reason) => {
+      console.log(`User disconnected: ${socket.id}, reason: ${reason}`);
       const result = removePlayer(socket.id);
       if (result && result.roomCode && !result.isEmpty) {
         // Notify the remaining player

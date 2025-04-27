@@ -96,10 +96,12 @@
                          }
                     });
 
-                     this.socket.on('gameStarted', ({ gameType }) => {
+                    this.socket.on('gameStarted', ({ gameType }) => {
                         console.log(`Game started with type: ${gameType}`);
-                        // Redirect to the play screen
-                        window.location.href = `/play/${this.roomCode}`;
+                        // Delay navigation to the play screen to ensure room readiness
+                        setTimeout(() => {
+                            window.location.href = `/play/${this.roomCode}`;
+                        }, 1000); // 1 second delay
                     });
 
 
