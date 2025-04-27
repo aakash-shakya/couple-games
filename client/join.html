@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Join Room - LoverPlay</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="/socket.io/socket.io.js"></script>
+    <script src="//unpkg.com/alpinejs" defer></script>
+     <link href="https://fonts.googleapis.com/css2?family=Pacifico&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/assets/css/style.css">
+     <style>
+        body { background: linear-gradient(135deg, #C8A2C8 0%, #FFC0CB 100%); }
+         .cursive { font-family: 'Pacifico', cursive; }
+    </style>
+</head>
+<body class="flex flex-col items-center justify-center min-h-screen p-4 text-purple-900"
+      x-data="joinRoom()">
+
+    <a href="/" class="absolute top-4 left-4 text-white hover:text-pink-200 transition">&larr; Back Home</a>
+
+    <h1 class="cursive text-5xl text-white mb-8 drop-shadow-lg">Join a Room</h1>
+
+    <div class="bg-white/80 p-8 rounded-xl shadow-2xl max-w-sm w-full text-center">
+        <label for="roomCodeInput" class="block text-lg mb-2">Enter Room Code:</label>
+        <input type="text" id="roomCodeInput" x-model="inputCode" maxlength="8"
+               placeholder="ABCDEFGH"
+               class="w-full p-3 mb-4 border-2 border-purple-300 rounded-lg text-center text-2xl font-mono tracking-widest uppercase focus:outline-none focus:ring-2 focus:ring-pink-400">
+
+        <button @click="attemptJoin" :disabled="!inputCode || joining"
+                class="w-full px-6 py-3 bg-purple-500 text-white text-lg font-semibold rounded-full shadow-lg hover:bg-purple-600 transition duration-300 ease-in-out transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed">
+            <span x-show="!joining">Join Room 💕</span>
+            <span x-show="joining">Joining...</span>
+        </button>
+
+        <p x-show="error" x-text="error" class="text-red-600 mt-4"></p>
+        <p x-show="status" x-text="status" class="text-green-600 mt-4"></p>
+    </div>
+
+    <script>
+        function joinRoom() {
+            return {
+                socket: null,
+                inputCode: '',
+                joining: false,
+                error: '',
+                status: '',
+                playerNumber: null,
+                joinedRoomCode: null,
+                init() {
+                    this.socket = io();
+
+                    this.socket.on('connect', () => {
+                        console.log('Connected to server');
+                        this.status = 'Connected. Enter room code.';
+                        this.error = '';
+                    });
+
+                    this.socket.on('joined', ({ roomCode, playerNumber }) => {
+                        console.log(`Successfully joined room ${roomCode} as Player ${playerNumber}`);
+                        this.joining = false;
+                        this.playerNumber = playerNumber;
+                        this.joinedRoomCode = roomCode;
+                        this.status = 'Joined room! Waiting for Player 1 to start the game...';
+                        this.error = '';
+                        // Player 2 doesn't start the game, just waits
+                    });
+
+                     this.socket.on('gameStarted', ({ gameType }) => {
+                        console.log(`Game started by Player 1 with type: ${gameType}`);
+                        // Redirect to the play screen
+                         if (this.joinedRoomCode) {
+                            window.location.href = `/play/${this.joinedRoomCode}`;
+                         } else {
+                             console.error("Game started but room code not stored on client.");
+                             this.error = "Error starting game. Please try again.";
+                         }
+                    });
+
+                    this.socket.on('error', ({ message }) => {
+                        console.error('Server error:', message);
+                        this.error = message;
+                        this.status = '';
+                        this.joining = false;
+                    });
+
+                    this.socket.on('disconnect', () => {
+                        console.log('Disconnected from server');
+                        this.error = 'Disconnected. Please refresh.';
+                        this.status = '';
+                        this.joining = false;
+                    });
+                },
+                attemptJoin() {
+                    if (!this.inputCode) return;
+                    this.joining = true;
+                    this.error = '';
+                    this.status = 'Attempting to join...';
+                    // Convert to uppercase to match generated codes
+                    const codeToJoin = this.inputCode.toUpperCase();
+                    this.socket.emit('joinRoom', { roomCode: codeToJoin });
+                }
+            }
+        }
+    </script>
+
+</body>
+</html>

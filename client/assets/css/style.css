@@ -1,0 +1,45 @@
+/* Basic styles - Tailwind will handle most things */
+body {
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    background-color: #FFF0F5; /* Lavender Blush - soft pink */
+    color: #4A0E60; /* Deep Purple */
+}
+
+/* Add custom animations or styles here if needed */
+.heartbeat {
+    animation: heartbeat 1.5s ease-in-out infinite both;
+}
+
+@keyframes heartbeat {
+    from { transform: scale(1); }
+    50% { transform: scale(1.1); }
+    to { transform: scale(1); }
+}
+
+/* Style for challenge text */
+#challenge-text {
+    min-height: 100px; /* Ensure space even when empty */
+    background-color: rgba(255, 255, 255, 0.7);
+    border-radius: 8px;
+    padding: 1rem;
+    margin-top: 1rem;
+    margin-bottom: 1rem;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    transition: all 0.3s ease-in-out;
+}
+
+/* Simple fade-in for new challenges */
+.fade-in {
+    animation: fadeIn 0.5s ease-in-out;
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+/* Button hover effect */
+button:hover {
+    transform: scale(1.05);
+    filter: brightness(1.1);
+}
