@@ -9,7 +9,8 @@ if (!apiKey) {
 }
 
 const genAI = apiKey ? new GoogleGenerativeAI(apiKey) : null;
-const model = genAI ? genAI.getGenerativeModel({ model: "gemini-pro" }) : null;
+// Updated model name
+const model = genAI ? genAI.getGenerativeModel({ model: "gemini-1.5-flash-latest" }) : null;
 
 // Simple static fallback challenges
 const staticChallenges = {
@@ -58,20 +59,24 @@ export async function generateChallenge(gameType = 'basic') {
   const prompt = promptMap[gameType] || promptMap['basic'];
 
   try {
-    console.log(`Requesting ${gameType} challenge from AI...`);
+    console.log(`Requesting ${gameType} challenge from AI using model gemini-1.5-flash-latest...`); // Log model name
     const result = await model.generateContent(prompt);
-    // Adjust based on actual Gemini API response structure
-     const response = await result.response;
-     const text = response.text().trim();
+    const response = await result.response; // Access response correctly
+    const text = response.text().trim(); // Get text content
 
     if (!text) {
-        throw new Error("No content generated");
+        console.warn("AI returned empty content, falling back to static.");
+        return getRandomStaticChallenge(gameType); // Fallback if AI gives empty response
     }
     console.log(`AI generated: ${text}`);
     return text;
   } catch (err) {
-    console.error("Gemini generation failed:", err.message);
+    // Log the specific error from the API if available
+    console.error("Gemini generation failed:", err.message || err);
+    if (err.response && err.response.data) {
+        console.error("API Error Details:", err.response.data);
+    }
     console.log("Falling back to static challenge.");
-    return getRandomStaticChallenge(gameType); // Fallback to static
+    return getRandomStaticChallenge(gameType); // Fallback to static on any error
   }
 }

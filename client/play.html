@@ -12,6 +12,15 @@
      <style>
         body { background: linear-gradient(135deg, #FFC0CB 0%, #C8A2C8 100%); }
          .cursive { font-family: 'Pacifico', cursive; }
+         /* Simple fade-in animation */
+        .fade-in {
+            animation: fadeInAnimation 0.8s ease-in forwards;
+            opacity: 0;
+        }
+        @keyframes fadeInAnimation {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
     </style>
 </head>
 <body class="flex flex-col items-center justify-center min-h-screen p-4 text-purple-900"
@@ -20,11 +29,12 @@
     <div class="bg-white/90 p-6 md:p-10 rounded-xl shadow-2xl max-w-lg w-full text-center">
         <h1 class="cursive text-4xl text-pink-600 mb-4 drop-shadow">LoverPlay</h1>
         <p class="text-sm mb-1">Room Code: <strong x-text="roomCode"></strong></p>
-        <p class="text-sm mb-4">You are Player <strong x-text="playerNumber"></strong></p>
+        <p class="text-sm mb-4">You are Player <strong x-text="playerNumber || '...' "></strong></p>
 
-        <div class="border-t border-b border-purple-200 py-6 my-6">
+        <div class="border-t border-b border-purple-200 py-6 my-6 min-h-[100px]">
             <h2 class="text-2xl font-semibold mb-3" x-text="turnStatus">Waiting for game...</h2>
-            <div id="challenge-text" class="text-lg text-purple-800 fade-in" x-html="currentChallenge || 'Waiting for the next challenge...'">
+            <!-- Ensure ID is present for animation trigger -->
+            <div id="challenge-text" class="text-lg text-purple-800" x-html="currentChallenge || 'Waiting for the next challenge...'">
                 <!-- Challenge text appears here -->
             </div>
         </div>
@@ -32,7 +42,8 @@
         <!-- Action Button (only shown when it's your turn) -->
         <template x-if="isMyTurn">
             <button @click="performAction"
-                    class="w-full px-6 py-3 mt-4 bg-green-500 text-white text-lg font-semibold rounded-full shadow-lg hover:bg-green-600 transition duration-300 ease-in-out transform hover:scale-105">
+                    :disabled="!isMyTurn"
+                    class="w-full px-6 py-3 mt-4 bg-green-500 text-white text-lg font-semibold rounded-full shadow-lg hover:bg-green-600 transition duration-300 ease-in-out transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed">
                 Done! Next Challenge 👉
             </button>
         </template>
@@ -53,7 +64,7 @@
             return {
                 socket: null,
                 roomCode: '',
-                playerNumber: null,
+                playerNumber: null, // Will be set by server
                 gameType: null,
                 currentChallenge: '',
                 isMyTurn: false,
@@ -69,6 +80,8 @@
 
                     if (!this.roomCode) {
                         this.error = "No room code specified!";
+                        // Redirect or show error prominently
+                        // window.location.href = '/'; // Example redirect
                         return;
                     }
 
@@ -77,30 +90,38 @@
                     this.socket.on('connect', () => {
                         console.log('Connected to game server');
                         this.turnStatus = 'Connected. Waiting for game start...';
-                        // Re-join room implicitly or explicitly if needed after reconnect
-                        // For simplicity, we assume the server handles session continuity
-                        // Or we might need to emit a 'rejoin' event with roomCode
+                        this.error = ''; // Clear connection error on successful connect
+                        // Request player number confirmation upon connection/reconnection
+                        this.socket.emit('getPlayerNumber', { roomCode: this.roomCode });
                     });
-
-                    // Need to know which player number this client is.
-                    // This info is usually received during the 'join' or 'create' phase.
-                    // We'll try to retrieve it from localStorage or ask the server.
-                    // For now, let's assume it might be set by a previous page or needs fetching.
-                    // A robust way would be for the server to confirm player number upon connection to this page.
-                    // Let's add a temporary way to ask the server.
-                    this.socket.emit('getPlayerNumber', { roomCode: this.roomCode }); // Custom event needed on server
 
                      this.socket.on('playerNumberInfo', ({ number }) => {
                          if (number) {
                             this.playerNumber = number;
                             console.log(`Confirmed as Player ${this.playerNumber}`);
+                            // Update status if waiting for player number
+                            if (this.turnStatus.includes('Connecting') || this.turnStatus.includes('Waiting for player')) {
+                                this.turnStatus = 'Waiting for game start...';
+                            }
                          } else {
                              // Handle case where server doesn't know this socket in this room
-                             this.error = "Could not verify player status. Try rejoining.";
+                             console.error("Could not verify player status for room:", this.roomCode);
+                             this.error = "Could not verify player status. Try rejoining the room.";
+                             this.turnStatus = 'Error';
                              // Maybe redirect: window.location.href = '/join.html';
                          }
                      });
 
+                    // Listen for game readiness (both players joined)
+                    this.socket.on('gameReady', ({ roomCode }) => {
+                        console.log(`Room ${roomCode} is ready.`);
+                        if (this.playerNumber === 1) {
+                            this.turnStatus = 'Room ready! Waiting for you (Player 1) to start the game.';
+                            // Optionally show a start button here if not already present
+                        } else {
+                            this.turnStatus = 'Room ready! Waiting for Player 1 to start the game.';
+                        }
+                    });
 
                     this.socket.on('gameStarted', ({ gameType }) => {
                         console.log(`Game started: ${gameType}`);
@@ -108,6 +129,7 @@
                         this.status = `Game started: ${gameType}!`;
                         this.error = '';
                         this.partnerStatus = '';
+                        // Initial turn status will be set by 'yourTurn' or 'opponentTurn'
                     });
 
                     this.socket.on('yourTurn', ({ challenge }) => {
@@ -115,10 +137,10 @@
                         this.currentChallenge = this.formatChallenge(challenge);
                         this.isMyTurn = true;
                         this.turnStatus = "💖 Your Turn! 💖";
-                        this.status = '';
+                        this.status = ''; // Clear previous status
                         this.error = '';
-                        this.partnerStatus = '';
-                        this.triggerFadeIn();
+                        this.partnerStatus = ''; // Clear partner status
+                        this.triggerFadeIn(); // Trigger animation
                     });
 
                     this.socket.on('opponentTurn', ({ challenge }) => {
@@ -128,16 +150,21 @@
                         this.turnStatus = "Partner's Turn... 🤔";
                         this.status = '';
                         this.error = '';
-                        this.partnerStatus = '';
-                         this.triggerFadeIn();
+                        // Don't clear partnerStatus here, it might have just been set by opponentAction
+                        this.triggerFadeIn(); // Trigger animation
                     });
 
                      this.socket.on('opponentAction', ({ action }) => {
                         console.log('Opponent action:', action);
-                        // Display something subtle indicating partner acted
-                        this.partnerStatus = `Partner completed the task! ✨`;
+                        // Display feedback that partner acted
+                        this.partnerStatus = `Partner completed the task! ✨ Waiting for your turn...`;
                         // Clear after a few seconds
-                        setTimeout(() => this.partnerStatus = '', 3000);
+                        setTimeout(() => {
+                            // Only clear if it hasn't been replaced by a new turn message
+                            if (this.partnerStatus === `Partner completed the task! ✨ Waiting for your turn...`) {
+                                this.partnerStatus = '';
+                            }
+                        }, 4000);
                     });
 
 
@@ -147,36 +174,41 @@
                         this.turnStatus = 'Game Over';
                         this.isMyTurn = false;
                         this.currentChallenge = 'Your partner has left the room. 😢';
+                        this.triggerFadeIn(); // Show the message
                     });
 
                     this.socket.on('error', ({ message }) => {
                         console.error('Game error:', message);
                         this.error = message;
-                        // Decide if game should stop based on error type
+                        // Optionally change turnStatus based on error severity
+                        // e.g., if (message.includes('Failed to generate')) this.turnStatus = 'Error generating challenge';
                     });
 
-                    this.socket.on('disconnect', () => {
-                        console.log('Disconnected from server');
+                    this.socket.on('disconnect', (reason) => {
+                        console.log('Disconnected from server:', reason);
                         this.error = 'Connection lost. Attempting to reconnect...';
                         this.turnStatus = 'Disconnected';
-                        // Handle reconnection logic if needed
+                        this.isMyTurn = false; // Cannot act while disconnected
+                        // Alpine.js will automatically try to reconnect via Socket.IO client library
                     });
                 },
 
                 performAction() {
                     if (!this.isMyTurn) return;
-                    console.log('Performing action (e.g., completed challenge)');
+                    console.log('Performing action (completed challenge)');
                     this.status = 'Sending confirmation...';
-                    // Simple action confirmation, could be expanded
+                    this.error = ''; // Clear previous errors
                     this.socket.emit('playerAction', { action: 'completed' });
                     this.isMyTurn = false; // Visually disable button immediately
-                    this.turnStatus = "Waiting for next challenge...";
+                    this.turnStatus = "Waiting for next challenge..."; // Optimistic update
                 },
 
                 formatChallenge(text) {
-                    // Basic formatting: replace newlines with <br>
-                    // Add more complex formatting/parsing if needed
-                    return text.replace(/\n/g, '<br>');
+                    if (!text) return 'Waiting...';
+                    // Basic formatting: replace newlines with <br> for display
+                    // Also escape HTML to prevent potential injection if AI includes tags
+                    const escapedText = text.replace(/</g, "<").replace(/>/g, ">");
+                    return escapedText.replace(/\n/g, '<br>');
                 },
 
                 triggerFadeIn() {
@@ -184,7 +216,8 @@
                     const el = document.getElementById('challenge-text');
                     if (el) {
                         el.classList.remove('fade-in');
-                        // void el.offsetWidth; // Trigger reflow
+                        // void el.offsetWidth; // Force reflow - sometimes needed, sometimes not. Modern browsers are good.
+                        // Using requestAnimationFrame is generally safer for timing.
                         requestAnimationFrame(() => {
                              el.classList.add('fade-in');
                         });
@@ -192,23 +225,6 @@
                 }
             }
         }
-
-        // Add a way for the server to respond to 'getPlayerNumber'
-        // This needs a corresponding handler on the server side in sockets.js
-        // Example server-side handler (add inside io.on('connection', ...)):
-        /*
-        socket.on('getPlayerNumber', ({ roomCode }) => {
-            const room = getRoom(roomCode);
-            let number = null;
-            if (room) {
-                const index = room.players.indexOf(socket.id);
-                if (index !== -1) {
-                    number = index + 1; // 1 or 2
-                }
-            }
-            socket.emit('playerNumberInfo', { number });
-        });
-        */
     </script>
 
 </body>
