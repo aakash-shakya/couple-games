@@ -12,35 +12,87 @@
     <style>
         body { background: linear-gradient(135deg, #FFC0CB 0%, #C8A2C8 100%); }
         .cursive { font-family: 'Pacifico', cursive; }
-        /* Simple fade-in animation */
-        .fade-in {
-            animation: fadeInAnimation 0.8s ease-in forwards;
-            opacity: 0;
-        }
-        @keyframes fadeInAnimation {
-            from { opacity: 0; transform: translateY(10px); }
-            to { opacity: 1; transform: translateY(0); }
-        }
+        .fade-in { animation: fadeInAnimation 0.8s ease-in forwards; opacity: 0; }
+        @keyframes fadeInAnimation { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+        /* Style for video elements */
+        .video-container { display: flex; justify-content: space-between; margin-bottom: 1rem; gap: 1rem; }
+        .video-box { background-color: rgba(0,0,0,0.1); border-radius: 0.5rem; overflow: hidden; width: 48%; aspect-ratio: 4 / 3; position: relative; }
+        .video-box video { display: block; width: 100%; height: 100%; object-fit: cover; }
+        .video-label { position: absolute; top: 4px; left: 6px; background: rgba(0,0,0,0.5); color: white; padding: 2px 6px; font-size: 0.75rem; border-radius: 4px; }
+        /* Hide local video if not active */
+        .video-box#localVideoContainer:not(.active) { display: none; }
+        /* Simple pulse for waiting */
+        .pulse { animation: pulseAnimation 1.5s infinite; }
+        @keyframes pulseAnimation { 0%, 100% { opacity: 1; } 50% { opacity: 0.6; } }
     </style>
 </head>
 <body class="flex flex-col items-center justify-center min-h-screen p-4 text-purple-900"
       x-data="playGame()">
 
-    <div class="bg-white/90 p-6 md:p-10 rounded-xl shadow-2xl max-w-lg w-full text-center">
+    <div class="bg-white/90 p-6 md:p-10 rounded-xl shadow-2xl max-w-2xl w-full text-center">
         <h1 class="cursive text-4xl text-pink-600 mb-4 drop-shadow">LoverPlay</h1>
         <p class="text-sm mb-1">Room Code: <strong x-text="roomCode"></strong></p>
         <p class="text-sm mb-4">You are Player <strong x-text="playerNumber || '...' "></strong></p>
 
+        <!-- Video Feeds -->
+        <div class="video-container">
+            <!-- Local Video -->
+            <div id="localVideoContainer" class="video-box" :class="{ 'active': webcamActive }">
+                <video id="localVideo" autoplay muted playsinline></video>
+                <span class="video-label">You</span>
+            </div>
+            <!-- Remote Video -->
+            <div class="video-box active"> <!-- Always show remote box -->
+                <video id="remoteVideo" autoplay playsinline></video>
+                <span class="video-label">Partner</span>
+                <!-- Placeholder when partner's video is off -->
+                <div x-show="!partnerWebcamActive" class="absolute inset-0 flex items-center justify-center bg-gray-200 text-gray-500 text-sm">
+                    Partner's video off
+                </div>
+            </div>
+        </div>
+        <!-- Webcam Toggle Button -->
+        <button @click="toggleWebcam"
+                class="mb-4 px-4 py-2 text-sm rounded-full transition duration-300"
+                :class="webcamActive ? 'bg-red-500 hover:bg-red-600 text-white' : 'bg-blue-500 hover:bg-blue-600 text-white'">
+            <span x-show="!webcamActive">📷 Start Webcam</span>
+            <span x-show="webcamActive">🚫 Stop Webcam</span>
+        </button>
+
+        <!-- Challenge Area -->
         <div class="border-t border-b border-purple-200 py-6 my-6 min-h-[100px]">
             <h2 class="text-2xl font-semibold mb-3" x-text="turnStatus">Connecting...</h2>
-            <div id="challenge-text" class="text-lg text-purple-800" x-html="currentChallenge || 'Waiting for the game to start...'">
+            <!-- Ensure this div uses x-html and the currentChallenge variable -->
+            <div id="challenge-text" class="text-lg text-purple-800 fade-in" x-html="currentChallenge">
                 <!-- Challenge text appears here -->
             </div>
         </div>
 
+        <!-- Response Area -->
+        <div class="mt-4 mb-6">
+            <!-- Display Partner's Text Answer -->
+            <template x-if="receivedTextAnswer">
+                <div class="mb-4 p-3 bg-purple-100 border border-purple-200 rounded-lg text-left italic">
+                    <strong>Partner wrote:</strong>
+                    <p x-text="receivedTextAnswer" class="mt-1 whitespace-pre-wrap"></p>
+                </div>
+            </template>
+
+            <!-- Text Input Area -->
+            <template x-if="isMyTurn">
+                <textarea id="textAnswer" x-model="textAnswer"
+                          :disabled="webcamActive"
+                          rows="3"
+                          class="w-full p-3 border border-purple-300 rounded-lg focus:ring-2 focus:ring-pink-400 focus:border-transparent disabled:bg-gray-200 disabled:cursor-not-allowed"
+                          :placeholder="webcamActive ? 'Webcam is active, speak or perform!' : 'Type your answer here...'"></textarea>
+            </template>
+        </div>
+
+
+        <!-- Action Button -->
         <template x-if="isMyTurn">
             <button @click="performAction"
-                    :disabled="!isMyTurn || actionInProgress"
+                    :disabled="actionInProgress"
                     class="w-full px-6 py-3 mt-4 bg-green-500 text-white text-lg font-semibold rounded-full shadow-lg hover:bg-green-600 transition duration-300 ease-in-out transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed">
                 <span x-show="!actionInProgress">Done! Next Challenge 👉</span>
                 <span x-show="actionInProgress">Sending...</span>
@@ -59,21 +111,33 @@
     <script>
         function playGame() {
             return {
+                // Core state
                 socket: null,
                 roomCode: '',
                 playerNumber: null,
                 gameType: null,
-                currentChallenge: '',
+                currentChallenge: 'Waiting for the game to start...', // Initial text
                 isMyTurn: false,
                 turnStatus: 'Initializing...',
                 status: '',
                 error: '',
                 partnerStatus: '',
-                actionInProgress: false, // Prevent double clicks
+                actionInProgress: false,
+
+                // Webcam & Text Input State
+                webcamActive: false,
+                localStream: null,
+                remoteStream: null, // For WebRTC later
+                partnerWebcamActive: false, // Track partner's webcam status
+                textAnswer: '',
+                receivedTextAnswer: '',
+
+                // WebRTC related (placeholders for now)
+                peerConnection: null,
 
                 init() {
                     const pathSegments = window.location.pathname.split('/');
-                    this.roomCode = pathSegments[pathSegments.length - 1]?.toUpperCase(); // Ensure uppercase
+                    this.roomCode = pathSegments[pathSegments.length - 1]?.toUpperCase();
 
                     if (!this.roomCode) {
                         this.error = "No room code found in URL!";
@@ -84,42 +148,64 @@
                     this.turnStatus = 'Connecting to game...';
                     this.socket = io();
 
+                    this.setupSocketListeners(); // Keep listeners organized
+                }, // End init()
+
+                setupSocketListeners() {
                     this.socket.on('connect', () => {
                         console.log('Connected to game server with socket ID:', this.socket.id);
                         this.status = 'Connected. Joining room...';
                         this.error = '';
-                        // IMPORTANT: Emit 'joinGameRoom' (or a similar distinct event)
-                        // to signal this is the play screen joining, not the initial join.
-                        // The server needs to handle this event specifically to update the socket ID.
                         this.socket.emit('joinGameRoom', { roomCode: this.roomCode });
                     });
 
-                    // Listen for an event confirming the player is correctly associated in the game room
-                    // The server should send this after handling 'joinGameRoom'
                     this.socket.on('gameJoined', ({ playerNumber, gameState }) => {
-                        console.log(`Successfully joined game room ${this.roomCode} as Player ${playerNumber}. Current state:`, gameState);
+                        console.log(`Successfully joined game room ${this.roomCode} as Player ${playerNumber}. Initial state received.`);
                         this.playerNumber = playerNumber;
-                        this.gameType = gameState.gameType;
+                        this.updateGameState(gameState); // Update with initial state
                         this.status = `Joined Game: ${this.gameType || 'Unknown Type'}`;
                         this.error = '';
-
-                        // Update UI based on the received game state
-                        this.updateGameState(gameState);
+                        // TODO: Initialize WebRTC connection setup here if needed
                     });
 
-                    // Consolidated event for game state updates (turn changes, new challenges)
                     this.socket.on('gameStateUpdate', (gameState) => {
-                        console.log('Received game state update:', gameState);
-                        this.updateGameState(gameState);
-                        this.triggerFadeIn(); // Add fade-in for new challenges
+                        console.log('Received game state update.');
+                        this.updateGameState(gameState); // Update with new state
+                        this.triggerFadeIn(); // Trigger animation after update
+                        // Clear previous received answer when turn changes/new challenge arrives
+                        this.receivedTextAnswer = '';
+                        // Only clear own text input if it's now partner's turn
+                        if (!this.isMyTurn) {
+                            this.textAnswer = '';
+                        }
                     });
 
+                    // --- Text Answer Listener ---
+                    this.socket.on('receiveTextAnswer', (answer) => {
+                        console.log('Received text answer:', answer);
+                        this.receivedTextAnswer = answer;
+                    });
 
-                    // Simplified opponent action notification
+                    // --- Webcam Status Listener ---
+                    this.socket.on('partnerWebcamStatus', (status) => {
+                        console.log('Partner webcam status changed:', status);
+                        this.partnerWebcamActive = status.active;
+                        // If partner turns webcam OFF, maybe clear remote video?
+                        if (!status.active) {
+                            const remoteVideo = document.getElementById('remoteVideo');
+                            if (remoteVideo && remoteVideo.srcObject) {
+                                remoteVideo.srcObject.getTracks().forEach(track => track.stop());
+                                remoteVideo.srcObject = null;
+                            }
+                            // TODO: Close WebRTC connection if active
+                        }
+                        // TODO: WebRTC logic will handle receiving the stream when status.active is true
+                    });
+
+                    // --- Other Listeners ---
                     this.socket.on('opponentActionCompleted', () => {
                         console.log('Opponent completed their turn.');
                         this.partnerStatus = `Partner completed the task! ✨`;
-                        // No need to automatically clear, gameStateUpdate will change the status text
                     });
 
                     this.socket.on('playerLeft', ({ message }) => {
@@ -127,18 +213,15 @@
                         this.error = message || 'Your partner has left the room. 😢';
                         this.turnStatus = 'Game Over';
                         this.isMyTurn = false;
-                        this.currentChallenge = '';
-                        this.partnerStatus = '';
-                        this.triggerFadeIn();
+                        this.stopWebcam(); // Stop webcam if partner leaves
+                        // TODO: Clean up WebRTC connection
                     });
 
                     this.socket.on('error', ({ message }) => {
                         console.error('Game error:', message);
-                        // Avoid overwriting critical errors like playerLeft
-                        if (!this.error || !this.error.includes('left')) {
+                        if (!this.error || !this.error.includes('left')) { // Avoid overwriting playerLeft message
                             this.error = message;
                         }
-                        // Consider more specific error handling if needed
                         if (message.includes('Room not found') || message.includes('Could not join')) {
                              this.turnStatus = 'Error joining room';
                              this.currentChallenge = 'Could not connect to the game. Please try going back and joining again.';
@@ -147,105 +230,176 @@
 
                     this.socket.on('disconnect', (reason) => {
                         console.log('Disconnected from server:', reason);
-                        // Only show reconnecting message if the game wasn't already over
                         if (this.turnStatus !== 'Game Over') {
                             this.error = `Connection lost (${reason}). Attempting to reconnect...`;
                             this.turnStatus = 'Reconnecting...';
                             this.isMyTurn = false;
                             this.partnerStatus = '';
+                            this.stopWebcam(); // Stop webcam on disconnect
                         }
                     });
 
-                     // Optional: Handle reconnection logic if needed
                     this.socket.on('reconnect', (attemptNumber) => {
                         console.log(`Reconnected after ${attemptNumber} attempts.`);
                         this.turnStatus = 'Reconnected. Resuming game...';
                         this.error = '';
                         // Re-emit joinGameRoom to ensure server has the correct socket ID
                         this.socket.emit('joinGameRoom', { roomCode: this.roomCode });
+                        // Webcam will need to be manually restarted by the user after reconnect
                     });
+                }, // End setupSocketListeners()
 
-                    // Optional: More detailed reconnect listeners if debugging is needed
-                    // this.socket.io.on('reconnect_attempt', (attempt) => {
-                    //     console.log(`Reconnection attempt #${attempt}`);
-                    // });
-                    // this.socket.io.on('reconnect_failed', () => {
-                    //     console.error('Reconnection failed permanently.');
-                    //     this.error = 'Could not reconnect to the server. Please refresh.';
-                    //     this.turnStatus = 'Disconnected';
-                    // });
-                    // this.socket.io.on('reconnect_error', (error) => {
-                    //     console.error('Reconnection error:', error);
-                    //     this.error = 'Error during reconnection attempt.';
-                    // });
-                },
-
+                // --- REFINED updateGameState ---
                 updateGameState(gameState) {
-                    this.currentChallenge = this.formatChallenge(gameState.currentChallenge);
-                    this.gameType = gameState.gameType; // Ensure gameType is updated
+                    console.log('Updating game state with:', JSON.stringify(gameState)); // Log received state
 
-                    if (gameState.currentPlayer === this.playerNumber) {
+                    // 1. Update Game Type
+                    this.gameType = gameState.gameType;
+
+                    // 2. Update Challenge Text (Handle potential null/empty values)
+                    // Use the formatChallenge function to process the text
+                    const newChallenge = this.formatChallenge(gameState.currentChallenge);
+                    console.log('Formatted challenge:', newChallenge);
+                    this.currentChallenge = newChallenge; // Update the bound variable
+
+                    // 3. Update Turn Status and isMyTurn flag
+                    if (gameState.gameOver) {
+                        this.turnStatus = "Game Over";
+                        this.isMyTurn = false;
+                    } else if (gameState.turn === this.playerNumber) {
                         this.isMyTurn = true;
                         this.turnStatus = "💖 Your Turn! 💖";
                         this.partnerStatus = ''; // Clear partner status on your turn
                     } else {
                         this.isMyTurn = false;
-                        // Only show partner's turn if game isn't over and challenge exists
-                        if (this.turnStatus !== 'Game Over' && gameState.currentChallenge) {
-                             this.turnStatus = "Partner's Turn... 🤔";
-                        } else if (!gameState.currentChallenge && this.turnStatus !== 'Game Over') {
-                            this.turnStatus = 'Waiting for next challenge...';
+                        // Base turn status on whether a challenge exists
+                        this.turnStatus = gameState.currentChallenge ? "Partner's Turn... 🤔" : 'Waiting...';
+                    }
+
+                    // 4. Reset Action Flag
+                    this.actionInProgress = false;
+
+                    // 5. Clear generic status messages
+                    if (this.status.includes('Joining') || this.status.includes('Connected')) {
+                        this.status = '';
+                    }
+
+                    // 6. Force Alpine to re-evaluate the DOM after state updates
+                    this.$nextTick(() => {
+                        console.log('Alpine $nextTick: DOM updated.');
+                        // The challenge text bound via x-html="currentChallenge" should now be visually updated
+                    });
+                },
+
+                // --- REFINED formatChallenge ---
+                formatChallenge(text) {
+                    // Use a more specific fallback if text is truly empty/null after loading
+                    if (!text || text === "Loading first challenge...") {
+                        // Check if the game has actually started (turn assigned)
+                        if (this.playerNumber && this.gameType && this.turnStatus !== 'Initializing...') {
+                             return 'Waiting for challenge...'; // More specific fallback
+                        } else {
+                             return 'Waiting for the game to start...'; // Initial fallback
                         }
                     }
-                     // Reset action flag when state updates
-                    this.actionInProgress = false;
-                    // Clear generic status messages when game state is known
-                    this.status = '';
-                },
-
-                performAction() {
-                    if (!this.isMyTurn || this.actionInProgress) return;
-
-                    console.log('Performing action (completed challenge)');
-                    this.actionInProgress = true; // Set flag
-                    this.status = ''; // Clear previous status
-                    this.error = '';
-                    this.partnerStatus = '';
-                    // Emit an event indicating the current player finished their turn
-                    this.socket.emit('completeTurn', { roomCode: this.roomCode });
-
-                    // Optimistically update UI, server confirmation will follow via gameStateUpdate
-                    this.isMyTurn = false;
-                    this.turnStatus = "Waiting for next challenge...";
-                },
-
-                formatChallenge(text) {
-                    if (!text) return 'Waiting for the next challenge...';
                     // Basic escaping and formatting
                     let escaped = text.replace(/&/g, '&amp;')
                                       .replace(/</g, '&lt;')
                                       .replace(/>/g, '&gt;')
                                       .replace(/"/g, '&quot;')
                                       .replace(/'/g, '&#039;');
-                    // Bold formatting
                     escaped = escaped.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
-                     // Newline formatting
                     return escaped.replace(/\n/g, '<br>');
                 },
 
                 triggerFadeIn() {
-                    this.$nextTick(() => { // Ensure DOM is updated before manipulating class
+                     this.$nextTick(() => { // Ensure DOM is updated before manipulating class
                         const el = document.getElementById('challenge-text');
                         if (el) {
                             el.classList.remove('fade-in');
-                            // Force reflow/repaint before adding class again
-                            void el.offsetWidth;
+                            void el.offsetWidth; // Force reflow
                             el.classList.add('fade-in');
                         }
                     });
-                }
-            }
-        }
+                },
+
+                // --- Webcam Methods ---
+                async toggleWebcam() {
+                    if (this.webcamActive) {
+                        this.stopWebcam();
+                    } else {
+                        await this.startWebcam();
+                    }
+                },
+
+                async startWebcam() {
+                    try {
+                        this.localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+                        const localVideo = document.getElementById('localVideo');
+                        localVideo.srcObject = this.localStream;
+                        this.webcamActive = true;
+                        this.textAnswer = ''; // Clear text answer when starting webcam
+                        // Notify partner
+                        this.socket.emit('webcamStatus', { active: true });
+                        // TODO: Initiate WebRTC connection if not already connected
+                        console.log("Webcam started.");
+                    } catch (err) {
+                        console.error("Error accessing webcam:", err);
+                        this.error = "Could not access webcam. Please check permissions.";
+                        this.webcamActive = false; // Ensure state is correct on error
+                        this.localStream = null; // Clear stream on error
+                    }
+                },
+
+                stopWebcam() {
+                    if (this.localStream) {
+                        this.localStream.getTracks().forEach(track => track.stop());
+                        this.localStream = null;
+                        const localVideo = document.getElementById('localVideo');
+                        if (localVideo) localVideo.srcObject = null; // Check if element exists
+                    }
+                    if (this.webcamActive) { // Only emit/log if it was active
+                        this.webcamActive = false;
+                        // Notify partner
+                        this.socket.emit('webcamStatus', { active: false });
+                        // TODO: Close WebRTC connection if active
+                        console.log("Webcam stopped.");
+                    }
+                },
+
+                // --- Action Methods ---
+                // Optional: Send text during turn without ending it
+                // sendText() {
+                //     if (!this.isMyTurn || this.webcamActive || !this.textAnswer.trim()) return;
+                //     console.log('Sending text answer:', this.textAnswer);
+                //     this.socket.emit('sendTextAnswer', this.textAnswer);
+                // },
+
+                // Modified performAction to potentially send text if not using webcam
+                performAction() {
+                    if (!this.isMyTurn || this.actionInProgress) return;
+                    this.actionInProgress = true;
+                    this.status = '';
+                    this.error = '';
+                    this.partnerStatus = '';
+
+                    // If text input is enabled and has content, send it before completing turn
+                    if (!this.webcamActive && this.textAnswer.trim()) {
+                        console.log('Sending final text answer before completing turn:', this.textAnswer);
+                        this.socket.emit('sendTextAnswer', this.textAnswer);
+                    }
+
+                    console.log('Completing turn');
+                    this.socket.emit('completeTurn');
+
+                    // Optimistic UI update
+                    this.isMyTurn = false;
+                    this.turnStatus = "Waiting for next challenge...";
+                    // Don't clear receivedTextAnswer here, wait for gameStateUpdate
+                },
+
+            } // End return object
+        } // End playGame()
     </script>
 </body>
 </html>
