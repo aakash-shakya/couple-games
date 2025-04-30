@@ -10,7 +10,7 @@ if (!apiKey) {
 
 const genAI = apiKey ? new GoogleGenerativeAI(apiKey) : null;
 // Updated model name
-const model = genAI ? genAI.getGenerativeModel({ model: "gemini-1.5-flash-latest" }) : null;
+const model = genAI ? genAI.getGenerativeModel({ model: "gemini-2.0-flash" }) : null;
 
 // Simple static fallback challenges
 const staticChallenges = {
@@ -51,16 +51,21 @@ export async function generateChallenge(gameType = 'basic') {
   }
 
   const promptMap = {
-    basic: "Generate a sweet, romantic question or simple activity for a couple playing a game. Keep it light and positive. Example: What's your favorite shared memory?",
-    fun: "Generate a playful, flirty, or funny 'truth or dare' style challenge for a couple. Keep it lighthearted. Example: Dare: Impersonate your partner for 30 seconds.",
-    spicy: "Generate a tasteful but spicy or intimate question or challenge for a couple in a romantic game. Avoid explicit language but encourage connection and flirtation. Example: Truth: What's something your partner does that secretly turns you on?"
+    basic: "Generate one sweet and romantic question or a simple, engaging activity specifically designed for a long-distance couple playing a game. Focus on fostering connection and positive feelings despite the distance. Example: What's one small thing your partner does, even from afar, that makes you feel most loved?",
+    fun: "Generate one playful, flirty, or funny 'truth or dare' style challenge tailored for a long-distance couple. The challenge should be easily doable remotely and bring laughter or lighthearted fun. Example: Dare: Describe your current surroundings to your partner using only animal sounds for one minute.",
+    spicy: "Generate one tasteful yet spicy or intimate question or challenge crafted for a long-distance couple in a romantic game. The prompt should encourage connection and flirtation across the distance without being explicit. Example: Truth: If we were together right now, what's the first intimate thing you'd want to do?"
   };
 
   const prompt = promptMap[gameType] || promptMap['basic'];
 
   try {
-    console.log(`Requesting ${gameType} challenge from AI using model gemini-1.5-flash-latest...`); // Log model name
-    const result = await model.generateContent(prompt);
+    console.log(`Requesting ${gameType} challenge from AI using model gemini-2.0-flash...`); // Log model name
+    const result = await model.generateContent({
+      prompt: prompt,
+      generationConfig: {
+        temperature: temperature,
+      },
+    });
     const response = await result.response; // Access response correctly
     const text = response.text().trim(); // Get text content
 
