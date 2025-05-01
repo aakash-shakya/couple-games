@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -7,25 +8,64 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="/socket.io/socket.io.js"></script>
     <script src="//unpkg.com/alpinejs" defer></script>
-     <link href="https://fonts.googleapis.com/css2?family=Pacifico&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Pacifico&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="/assets/css/style.css">
-     <style>
-        body { background: linear-gradient(135deg, #FFC0CB 0%, #C8A2C8 100%); }
-         .cursive { font-family: 'Pacifico', cursive; }
+    <style>
+        body {
+            background: linear-gradient(135deg, #FFC0CB 0%, #C8A2C8 100%);
+        }
+
+        .cursive {
+            font-family: 'Pacifico', cursive;
+        }
+
+        .loader {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #6d28d9;
+            border-radius: 50%;
+            width: 24px;
+            height: 24px;
+            animation: spin 1s linear infinite;
+            display: inline-block;
+            vertical-align: middle;
+            margin-right: 8px;
+        }
+
+        .modal-loader {
+            border: 8px solid #f3f3f3;
+            border-top: 8px solid #6d28d9;
+            border-radius: 50%;
+            width: 64px;
+            height: 64px;
+            animation: spin 1s linear infinite;
+            display: inline-block;
+        }
+
+        @keyframes spin {
+            0% {
+                transform: rotate(0deg);
+            }
+
+            100% {
+                transform: rotate(360deg);
+            }
+        }
     </style>
 </head>
-<body class="flex flex-col items-center justify-center min-h-screen p-4 text-purple-900"
-      x-data="createRoom()">
 
-    <a href="/" class="absolute top-4 left-4 text-white hover:text-pink-200 transition">&larr; Back Home</a>
+<body class="flex flex-col items-center justify-center min-h-screen p-4 text-purple-900" x-data="createRoom()">
+
+    <a href="/" class="absolute top-4 left-4 text-white hover:text-pink-200 transition">← Back Home</a>
 
     <h1 class="cursive text-5xl text-white mb-8 drop-shadow-lg">Create a Room</h1>
 
     <div class="bg-white/80 p-8 rounded-xl shadow-2xl max-w-sm w-full text-center">
         <template x-if="!roomCode">
-            <button @click="requestNewRoom"
-                    class="w-full px-6 py-3 bg-pink-500 text-white text-lg font-semibold rounded-full shadow-lg hover:bg-pink-600 transition duration-300 ease-in-out transform hover:scale-105">
-                Generate Room Code ✨
+            <button @click="requestNewRoom" class="w-full px-6 py-3 bg-pink-500 text-white text-lg font-semibold rounded-full shadow-lg hover:bg-pink-600 transition duration-300 ease-in-out transform hover:scale-105 flex items-center justify-center" :disabled="isLoading">
+                <template x-if="isLoading">
+                    <span class="loader"></span>
+                </template>
+                <span x-text="isLoading ? 'Generating...' : 'Generate Room Code ✨'"></span>
             </button>
         </template>
 
@@ -35,21 +75,28 @@
                 <div class="bg-purple-100 border-2 border-purple-300 rounded-lg p-4 mb-4">
                     <strong class="text-3xl font-mono tracking-widest text-purple-700" x-text="roomCode"></strong>
                 </div>
-                <button @click="copyCode"
-                        class="w-full px-6 py-2 mb-4 bg-purple-500 text-white text-sm rounded-full shadow hover:bg-purple-600 transition">
+                <button @click="copyCode" class="w-full px-6 py-2 mb-4 bg-purple-500 text-white text-sm rounded-full shadow hover:bg-purple-600 transition">
                     Copy Code
                 </button>
                 <p class="text-md italic mb-4">Waiting for your partner to join...</p>
                 <div class="animate-pulse text-pink-600">💖</div>
-                 <!-- Game Type Selection (Shown after partner joins) -->
+                <!-- Game Type Selection (Shown after partner joins) -->
                 <template x-if="gameReady">
                     <div class="mt-6 border-t pt-4">
                         <h2 class="text-xl font-semibold mb-3">Choose Your Game Mood:</h2>
                         <div class="space-y-3">
-                             <button @click="startGame('basic')" class="w-full py-2 px-4 bg-green-400 hover:bg-green-500 text-white rounded-lg transition">😊 Basic Romantic</button>
-                             <button @click="startGame('fun')" class="w-full py-2 px-4 bg-yellow-400 hover:bg-yellow-500 text-white rounded-lg transition">😂 Fun & Flirty</button>
-                             <button @click="startGame('spicy')" class="w-full py-2 px-4 bg-red-400 hover:bg-red-500 text-white rounded-lg transition">🌶️ Spicy & Intimate</button>
-                             <button @click="startGame('ai')" class="w-full py-2 px-4 bg-blue-400 hover:bg-blue-500 text-white rounded-lg transition">🤖 AI Surprise!</button>
+                            <button @click="startGame('basic')" class="w-full py-2 px-4 bg-green-400 hover:bg-green-500 text-white rounded-lg transition" :disabled="isLoading">
+                                😊 Basic Romantic
+                            </button>
+                            <button @click="startGame('fun')" class="w-full py-2 px-4 bg-yellow-400 hover:bg-yellow-500 text-white rounded-lg transition" :disabled="isLoading">
+                                😂 Fun & Flirty
+                            </button>
+                            <button @click="startGame('spicy')" class="w-full py-2 px-4 bg-red-400 hover:bg-red-500 text-white rounded-lg transition" :disabled="isLoading">
+                                🌶️ Spicy & Intimate
+                            </button>
+                            <button @click="startGame('ai')" class="w-full py-2 px-4 bg-blue-400 hover:bg-blue-500 text-white rounded-lg transition" :disabled="isLoading">
+                                🤖 AI Surprise!
+                            </button>
                         </div>
                     </div>
                 </template>
@@ -60,6 +107,16 @@
         <p x-show="status" x-text="status" class="text-green-600 mt-4"></p>
     </div>
 
+    <!-- Modal Dialog with Large Loader -->
+    <template x-if="isLoading">
+        <div class="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+            <div class="bg-white rounded-lg p-8 flex flex-col items-center justify-center">
+                <span class="modal-loader"></span>
+                <p class="mt-4 text-lg text-purple-900" x-text="status"></p>
+            </div>
+        </div>
+    </template>
+
     <script>
         function createRoom() {
             return {
@@ -68,16 +125,17 @@
                 error: '',
                 status: '',
                 playerNumber: null,
-                gameReady: false, // Flag to show game type selection
+                gameReady: false,
+                isLoading: false,
+                selectedGameType: null,
                 init() {
-                    // Connect to Socket.IO server
-                    // Ensure this matches your server address if not localhost
                     this.socket = io();
 
                     this.socket.on('connect', () => {
                         console.log('Connected to server');
                         this.status = 'Connected. Ready to create room.';
                         this.error = '';
+                        this.isLoading = false;
                     });
 
                     this.socket.on('roomCreated', ({ roomCode, playerNumber }) => {
@@ -86,40 +144,44 @@
                         this.playerNumber = playerNumber;
                         this.status = 'Room created! Waiting for partner...';
                         this.error = '';
+                        this.isLoading = false;
                     });
 
                     this.socket.on('gameReady', ({ roomCode: serverRoomCode }) => {
-                         if (this.roomCode === serverRoomCode) {
+                        if (this.roomCode === serverRoomCode) {
                             console.log('Partner joined! Game is ready.');
                             this.status = 'Partner joined! Choose a game type.';
-                            this.gameReady = true; // Show game type buttons
-                         }
+                            this.gameReady = true;
+                            this.isLoading = false;
+                        }
                     });
 
                     this.socket.on('gameStarted', ({ gameType }) => {
                         console.log(`Game started with type: ${gameType}`);
-                        // Delay navigation to the play screen to ensure room readiness
+                        this.isLoading = false;
                         setTimeout(() => {
                             window.location.href = `/play/${this.roomCode}`;
-                        }, 1000); // 1 second delay
+                        }, 1000);
                     });
-
 
                     this.socket.on('error', ({ message }) => {
                         console.error('Server error:', message);
                         this.error = message;
                         this.status = '';
+                        this.isLoading = false;
                     });
 
                     this.socket.on('disconnect', () => {
                         console.log('Disconnected from server');
                         this.error = 'Disconnected. Please refresh.';
                         this.status = '';
-                        this.roomCode = null; // Reset state on disconnect
+                        this.roomCode = null;
                         this.gameReady = false;
+                        this.isLoading = false;
                     });
                 },
                 requestNewRoom() {
+                    this.isLoading = true;
                     this.status = 'Creating room...';
                     this.error = '';
                     this.socket.emit('createRoom');
@@ -142,9 +204,11 @@
                             this.error = 'Could not copy code.';
                         });
                 },
-                 startGame(gameType) {
+                startGame(gameType) {
                     if (!this.roomCode || !this.gameReady) return;
                     console.log(`Requesting to start game type: ${gameType}`);
+                    this.isLoading = true;
+                    this.selectedGameType = gameType;
                     this.status = `Starting ${gameType} game...`;
                     this.socket.emit('startGame', { gameType });
                 }
@@ -153,4 +217,5 @@
     </script>
 
 </body>
+
 </html>
