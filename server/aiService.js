@@ -38,16 +38,16 @@ const staticChallenges = {
 };
 
 function getRandomStaticChallenge(gameType = 'basic') {
-    const type = staticChallenges[gameType] ? gameType : 'basic';
-    const challenges = staticChallenges[type];
-    return challenges[Math.floor(Math.random() * challenges.length)];
+  const type = staticChallenges[gameType] ? gameType : 'basic';
+  const challenges = staticChallenges[type];
+  return challenges[Math.floor(Math.random() * challenges.length)];
 }
 
 
 export async function generateChallenge(gameType = 'basic') {
   if (!model) {
-      console.log("AI Service disabled. Using static challenge.");
-      return getRandomStaticChallenge(gameType);
+    console.log("AI Service disabled. Using static challenge.");
+    return getRandomStaticChallenge(gameType);
   }
 
   const promptMap = {
@@ -59,19 +59,20 @@ export async function generateChallenge(gameType = 'basic') {
   const prompt = promptMap[gameType] || promptMap['basic'];
 
   try {
-    console.log(`Requesting ${gameType} challenge from AI using model gemini-2.0-flash...`); // Log model name
+    console.log(`Requesting ${gameType} challenge from AI using model gemini-2.0-flash...`);
     const result = await model.generateContent({
-      prompt: prompt,
+      contents: [{ role: "user", parts: [{ text: prompt }] }],
       generationConfig: {
-        temperature: temperature,
+        temperature: 0.7,
       },
     });
+
     const response = await result.response; // Access response correctly
     const text = response.text().trim(); // Get text content
 
     if (!text) {
-        console.warn("AI returned empty content, falling back to static.");
-        return getRandomStaticChallenge(gameType); // Fallback if AI gives empty response
+      console.warn("AI returned empty content, falling back to static.");
+      return getRandomStaticChallenge(gameType); // Fallback if AI gives empty response
     }
     console.log(`AI generated: ${text}`);
     return text;
@@ -79,7 +80,7 @@ export async function generateChallenge(gameType = 'basic') {
     // Log the specific error from the API if available
     console.error("Gemini generation failed:", err.message || err);
     if (err.response && err.response.data) {
-        console.error("API Error Details:", err.response.data);
+      console.error("API Error Details:", err.response.data);
     }
     console.log("Falling back to static challenge.");
     return getRandomStaticChallenge(gameType); // Fallback to static on any error

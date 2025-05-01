@@ -26,7 +26,7 @@
         .reaction-container { display: flex; gap: 0.5rem; justify-content: center; margin-top: 1rem; }
         .reaction-btn { font-size: 1.5rem; cursor: pointer; transition: transform 0.2s; }
         .reaction-btn:hover { transform: scale(1.2); }
-        .reaction-animation { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); font-size: 4rem; animation: reactionPop 1s ease-out forwards; pointer-events: none; }
+        .reaction-animation { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); font-size: 4rem; animation: reactionPop 1.2s ease-out forwards; pointer-events: none; z-index: 1000; }
         @keyframes reactionPop {
             0% { transform: translate(-50%, -50%) scale(0); opacity: 0; }
             50% { transform: translate(-50%, -50%) scale(1.5); opacity: 1; }
@@ -77,7 +77,7 @@
                 </div>
             </template>
             <template x-if="receivedReaction">
-                <div class="reaction-animation" x-text="receivedReaction" x-effect="setTimeout(() => { receivedReaction = ''; }, 1000)"></div>
+                <div class="reaction-animation" x-text="receivedReaction" x-effect="setTimeout(() => { receivedReaction = ''; }, 1200)"></div>
             </template>
             <template x-if="isMyTurn">
                 <textarea id="textAnswer" x-model="textAnswer"
@@ -161,11 +161,10 @@
                     });
 
                     this.socket.on('gameStateUpdate', (gameState) => {
-                        console.log('Received game state update.');
+                        console.log('Received game state update:', JSON.stringify(gameState));
                         this.updateGameState(gameState);
                         this.triggerFadeIn();
                         this.receivedTextAnswer = '';
-                        this.receivedReaction = '';
                         if (!this.isMyTurn) {
                             this.textAnswer = '';
                         }
@@ -177,8 +176,21 @@
                     });
 
                     this.socket.on('receiveReaction', (reaction) => {
-                        console.log('Received reaction:', reaction);
+                        console.log('Received reaction:', reaction, 'for Player', this.playerNumber);
                         this.receivedReaction = reaction;
+                        this.$nextTick(() => {
+                            console.log('Displaying reaction:', reaction, 'in UI for Player', this.playerNumber);
+                            const reactionElement = document.querySelector('.reaction-animation');
+                            if (reactionElement) {
+                                console.log('Reaction element found, animation should be visible');
+                            } else {
+                                console.warn('Reaction element not found in DOM');
+                            }
+                            setTimeout(() => {
+                                console.log('Clearing reaction:', reaction);
+                                this.receivedReaction = '';
+                            }, 1200);
+                        });
                     });
 
                     this.socket.on('partnerWebcamStatus', (status) => {
