@@ -51,9 +51,9 @@ export async function generateChallenge(gameType = 'basic') {
   }
 
   const promptMap = {
-    basic: "Generate one sweet and romantic question or a simple, engaging activity for a long-distance couple playing a game. Example: What's one small thing your partner does that makes you feel most loved?",
-    fun: "Generate one playful, flirty, or funny 'truth or dare' style challenge for a long-distance couple. The challenge must be doable remotely. Example: Dare: Describe your current surroundings using only animal sounds.",
-    spicy: "Generate one romantic and spicy sexual question or challenge for a long-distance couple playing a game. Keep it tasteful and focus on connection and discovering sexual preference of partner and make it spicy hot. Example: Truth: If we were together right now, what's the first thing you'd want to do?"
+    basic: "Generate ONLY the text for one sweet and romantic question OR a simple activity command directed from one long-distance partner to the other. Format as a direct question ('What do you...') or command ('Tell me...'). Do NOT include labels or introductory text. Example output: What's one small thing I do that makes you feel most loved?",
+    fun: "Generate ONLY the text for one playful, flirty, or funny 'truth or dare' style challenge directed from one long-distance partner to the other (must be doable remotely). Format as a direct question ('What is your...') or command ('Show me...'). Do NOT include labels or introductory text. Example output: Describe your current surroundings to me using only animal sounds.",
+    spicy: "Generate ONLY the text for one direct romantic/spicy question (truth) OR a direct command (dare) directed from one long-distance partner to the other, focusing on connection, sexual desire, or preferences. Keep it tasteful but intriguing and spicy hot sexual. Do NOT include labels or introductory text. Example output: Describe your most vivid sensual fantasy involving me."
   };
 
   const prompt = promptMap[gameType] || promptMap['basic'];

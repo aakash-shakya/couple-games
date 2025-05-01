@@ -26,7 +26,7 @@
         .reaction-container { display: flex; gap: 0.5rem; justify-content: center; margin-top: 1rem; }
         .reaction-btn { font-size: 1.5rem; cursor: pointer; transition: transform 0.2s; }
         .reaction-btn:hover { transform: scale(1.2); }
-        .reaction-animation { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); font-size: 4rem; animation: reactionPop 1.2s ease-out forwards; pointer-events: none; z-index: 1000; }
+        .reaction-animation { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); font-size: 4rem; animation: reactionPop 3s ease-out forwards; pointer-events: none; z-index: 3000; }
         @keyframes reactionPop {
             0% { transform: translate(-50%, -50%) scale(0); opacity: 0; }
             50% { transform: translate(-50%, -50%) scale(1.5); opacity: 1; }
@@ -64,15 +64,19 @@
         </div>
         <div class="mt-4 mb-6">
             <template x-if="receivedTextAnswer">
-                <div class="mb-4 p-3 bg-purple-100 border border-purple-200 rounded-lg text-left italic">
+                <div class="mb-4 p-3 bg-purple-100 border border-purple-200 rounded-lg text-left ">
                     <strong>Partner wrote:</strong>
-                    <p x-text="receivedTextAnswer" class="mt-1 whitespace-pre-wrap"></p>
+                    <p x-text="receivedTextAnswer" class="mt-1 whitespace-pre-wrap italic"></p>
                     <div class="reaction-container">
                         <span class="reaction-btn" @click="sendReaction('❤️')">❤️</span>
-                        <span class="reaction-btn" @click="sendReaction('💋')">💋</span>
-                        <span class="reaction-btn" @click="sendReaction('🔥')">🔥</span>
-                        <span class="reaction-btn" @click="sendReaction('🌶️')">🌶️</span>
-                        <span class="reaction-btn" @click="sendReaction('💧')">💧</span>
+                        <span class="reaction-btn" @click="sendReaction('🥰')">🥰</span>
+                        <span class="reaction-btn" @click="sendReaction('😍')">😍</span>
+                        <span class="reaction-btn" @click="sendReaction('👅')">👅</span>
+                        <span class="reaction-btn" @click="sendReaction('😈')">😈</span>
+                        <span class="reaction-btn" @click="sendReaction('🫦')">🫦</span>
+                        <span class="reaction-btn" @click="sendReaction('🍆')">🍆</span>
+                        <span class="reaction-btn" @click="sendReaction('💦')">💦</span>
+                        <span class="reaction-btn" @click="sendReaction('🍑')">🍑</span>
                     </div>
                 </div>
             </template>
