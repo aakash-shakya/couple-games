@@ -51,9 +51,9 @@ export async function generateChallenge(gameType = 'basic') {
   }
 
   const promptMap = {
-    basic: "Generate one sweet and romantic question or a simple, engaging activity specifically designed for a long-distance couple playing a game. Focus on fostering connection and positive feelings despite the distance. Example: What's one small thing your partner does, even from afar, that makes you feel most loved?",
-    fun: "Generate one playful, flirty, or funny 'truth or dare' style challenge tailored for a long-distance couple. The challenge should be easily doable remotely and bring laughter or lighthearted fun. Example: Dare: Describe your current surroundings to your partner using only animal sounds for one minute.",
-    spicy: "Generate one tasteful yet spicy or intimate question or challenge crafted for a long-distance couple in a romantic game. The prompt should encourage connection and flirtation across the distance without being explicit. Example: Truth: If we were together right now, what's the first intimate thing you'd want to do?"
+    basic: "Generate one sweet and romantic question or a simple, engaging activity for a long-distance couple playing a game. Example: What's one small thing your partner does that makes you feel most loved?",
+    fun: "Generate one playful, flirty, or funny 'truth or dare' style challenge for a long-distance couple. The challenge must be doable remotely. Example: Dare: Describe your current surroundings using only animal sounds.",
+    spicy: "Generate one romantic and spicy sexual question or challenge for a long-distance couple playing a game. Keep it tasteful and focus on connection and discovering sexual preference of partner and make it spicy hot. Example: Truth: If we were together right now, what's the first thing you'd want to do?"
   };
 
   const prompt = promptMap[gameType] || promptMap['basic'];
