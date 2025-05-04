@@ -1,6 +1,8 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import dotenv from 'dotenv';
 
+const MAX_HISTORY_FOR_PROMPT = 7; // Limit history items sent in the prompt
+
 dotenv.config();
 
 const apiKey = process.env.GEMINI_API_KEY;
@@ -37,14 +39,22 @@ const staticChallenges = {
   ],
 };
 
-function getRandomStaticChallenge(gameType = 'basic') {
+function getRandomStaticChallenge(gameType = 'basic', history = []) {
   const type = staticChallenges[gameType] ? gameType : 'basic';
-  const challenges = staticChallenges[type];
-  return challenges[Math.floor(Math.random() * challenges.length)];
+  const typeChallenges = staticChallenges[type];
+  const recentChallenges = history.slice(-MAX_HISTORY_FOR_PROMPT).map(h => h.challenge); // Use same limit for consistency
+
+  let availableChallenges = typeChallenges.filter(challenge => !recentChallenges.includes(challenge));
+
+  if (availableChallenges.length === 0) {
+    console.warn(`No unique static challenges left for type ${gameType}, reusing...`);
+    availableChallenges = typeChallenges; // Fallback to full list if all used recently
+  }
+  return availableChallenges[Math.floor(Math.random() * availableChallenges.length)];
 }
 
 
-export async function generateChallenge(gameType = 'basic') {
+export async function generateChallenge(gameType = 'basic', history = [], isRetry = false) {
   if (!model) {
     console.log("AI Service disabled. Using static challenge.");
     return getRandomStaticChallenge(gameType);
@@ -56,12 +66,22 @@ export async function generateChallenge(gameType = 'basic') {
     spicy: "Generate ONLY the text for one direct romantic/spicy question (truth) OR a direct command (dare) directed from one long-distance partner to the other, focusing on connection, sexual desire, or preferences. Keep it tasteful but intriguing and spicy hot sexual. Do NOT include labels or introductory text. Example output: Describe your most vivid sensual fantasy involving me."
   };
 
-  const prompt = promptMap[gameType] || promptMap['basic'];
+  let fullPrompt = promptMap[gameType] || promptMap['basic'];
+
+  // Add limited history context if available
+  const recentHistory = history.slice(-MAX_HISTORY_FOR_PROMPT);
+  if (recentHistory.length > 0) {
+    const historyText = recentHistory.map((item, index) => `${index + 1}. ${item.challenge}`).join('\n');
+    fullPrompt += `\n\n---\nCONTEXT: Avoid generating challenges similar in topic or format to these recent ones:\n${historyText}\n---`;
+  }
+  if (isRetry) {
+    fullPrompt += "\n\nPlease ensure the new challenge is significantly different from the previous ones provided in the context.";
+  }
 
   try {
-    console.log(`Requesting ${gameType} challenge from AI using model gemini-2.0-flash...`);
+    console.log(`Requesting ${gameType} challenge from AI (Retry: ${isRetry})...`);
     const result = await model.generateContent({
-      contents: [{ role: "user", parts: [{ text: prompt }] }],
+      contents: [{ role: "user", parts: [{ text: fullPrompt }] }],
       generationConfig: {
         temperature: 0.7,
       },
@@ -72,7 +92,7 @@ export async function generateChallenge(gameType = 'basic') {
 
     if (!text) {
       console.warn("AI returned empty content, falling back to static.");
-      return getRandomStaticChallenge(gameType); // Fallback if AI gives empty response
+      return getRandomStaticChallenge(gameType, history); // Pass history to static fallback
     }
     console.log(`AI generated: ${text}`);
     return text;
@@ -83,6 +103,6 @@ export async function generateChallenge(gameType = 'basic') {
       console.error("API Error Details:", err.response.data);
     }
     console.log("Falling back to static challenge.");
-    return getRandomStaticChallenge(gameType); // Fallback to static on any error
+    return getRandomStaticChallenge(gameType, history); // Pass history to static fallback
   }
 }

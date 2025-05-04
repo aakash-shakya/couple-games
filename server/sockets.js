@@ -11,6 +11,8 @@ import {
 } from './rooms.js';
 import { generateChallenge } from './aiService.js';
 
+const MAX_CHALLENGE_RETRIES = 2; // Max attempts to get a non-duplicate challenge
+
 export function setupSocketHandlers(httpServer) {
   const io = new Server(httpServer, {
     cors: {
@@ -18,6 +20,38 @@ export function setupSocketHandlers(httpServer) {
       methods: ["GET", "POST"]
     }
   });
+
+  // Helper function to get a unique challenge with retries
+  async function getUniqueChallenge(roomCode, gameType, history, attempt = 1) {
+    console.log(`Attempt ${attempt} to get unique challenge for ${roomCode}. History size: ${history.length}`);
+    // Pass history and indicate if it's a retry attempt
+    const newChallenge = await generateChallenge(gameType, history, attempt > 1);
+
+    if (!newChallenge) {
+      console.error(`Challenge generation failed completely for ${roomCode} after attempt ${attempt}.`);
+      return "Error: Couldn't generate a challenge. Maybe tell your partner a secret?"; // Final fallback
+    }
+
+    // Check against recent history (e.g., last 7 items, matching MAX_HISTORY_FOR_PROMPT)
+    const recentChallenges = history.slice(-7).map(h => h.challenge);
+    if (recentChallenges.includes(newChallenge)) {
+      console.warn(`Duplicate challenge detected: "${newChallenge}". Attempting retry ${attempt + 1}...`);
+      if (attempt < MAX_CHALLENGE_RETRIES) {
+        // Wait a tiny bit before retrying to avoid hammering API
+        await new Promise(resolve => setTimeout(resolve, 150));
+        return getUniqueChallenge(roomCode, gameType, history, attempt + 1);
+      } else {
+        console.error(`Max retries reached for ${roomCode}. Falling back to generic challenge.`);
+        // Use a very generic static challenge as a last resort
+        // Or return a specific error message challenge
+        return "Couldn't find a unique challenge! Quick, share your favorite memory together!";
+      }
+    }
+
+    // Unique challenge found
+    console.log(`Unique challenge obtained for ${roomCode}: "${newChallenge}"`);
+    return newChallenge;
+  }
 
   io.on('connection', (socket) => {
     console.log(`User connected: ${socket.id}`);
@@ -86,12 +120,13 @@ export function setupSocketHandlers(httpServer) {
         pendingTextConfirmation: false
       });
 
+      const currentRoomState = getRoom(room.roomCode); // Get state *after* initial update
       try {
-        const challenge = await generateChallenge(gameType);
+        const challenge = await getUniqueChallenge(room.roomCode, gameType, currentRoomState.gameState.history); // Use helper
         updateGameState(room.roomCode, { currentChallenge: challenge });
         console.log(`First challenge for ${room.roomCode}: ${challenge}`);
       } catch (error) {
-        console.error(`Failed to fetch initial challenge for ${room.roomCode}:`, error);
+        console.error(`Error during initial challenge fetch for ${room.roomCode}:`, error);
         updateGameState(room.roomCode, { currentChallenge: "Couldn't load challenge. Tell your partner something you appreciate!" });
         io.to(roomCode).emit('error', { message: 'Error loading first challenge.' });
       }
@@ -191,12 +226,12 @@ export function setupSocketHandlers(httpServer) {
         history: [...room.gameState.history, { player: opponent.playerNumber, challenge: room.gameState.currentChallenge }]
       });
 
+      const updatedRoomForNextChallenge = getRoom(room.roomCode); // Get state *after* history update
       let nextChallenge = "Loading next challenge...";
       try {
-        nextChallenge = await generateChallenge(room.gameState.gameType);
+        nextChallenge = await getUniqueChallenge(room.roomCode, updatedRoomForNextChallenge.gameState.gameType, updatedRoomForNextChallenge.gameState.history); // Use helper
       } catch (error) {
-        console.error(`Failed to fetch next challenge for ${room.roomCode}:`, error);
-        nextChallenge = "Challenge load error. Share a compliment!";
+        console.error(`Error during next challenge fetch for ${room.roomCode}:`, error);
         io.to(room.roomCode).emit('error', { message: 'Error loading next challenge.' });
       }
       updateGameState(room.roomCode, { currentChallenge: nextChallenge });
@@ -292,12 +327,12 @@ export function setupSocketHandlers(httpServer) {
         history: [...room.gameState.history, { player: player.playerNumber, challenge: room.gameState.currentChallenge }]
       });
 
+      const updatedRoomForNextChallenge = getRoom(room.roomCode); // Get state *after* history update
       let nextChallenge = "Loading next challenge...";
       try {
-        nextChallenge = await generateChallenge(room.gameState.gameType);
+        nextChallenge = await getUniqueChallenge(room.roomCode, updatedRoomForNextChallenge.gameState.gameType, updatedRoomForNextChallenge.gameState.history); // Use helper
       } catch (error) {
-        console.error(`Failed to fetch next challenge for ${room.roomCode}:`, error);
-        nextChallenge = "Challenge load error. Share a compliment!";
+        console.error(`Error during next challenge fetch for ${room.roomCode}:`, error);
         io.to(room.roomCode).emit('error', { message: 'Error loading next challenge.' });
       }
       updateGameState(room.roomCode, { currentChallenge: nextChallenge });
