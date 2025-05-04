@@ -87,6 +87,8 @@
                 <textarea id="textAnswer" x-model="textAnswer"
                           :disabled="webcamActive"
                           rows="3"
+                          @input="handleTyping()"
+                          @blur="handleStopTyping()"
                           class="w-full p-3 border border-purple-300 rounded-lg focus:ring-2 focus:ring-pink-400 focus:border-transparent disabled:bg-gray-200 disabled:cursor-not-allowed"
                           :placeholder="webcamActive ? 'Webcam is active, speak or perform!' : 'Type your answer here...'"></textarea>
             </template>
@@ -134,6 +136,8 @@
                 localTrackSenders: [],
                 negotiationPending: false,
                 reconnectTimeout: null,
+                isTyping: false, // Track if the current user is typing
+                typingTimeout: null, // Timeout handle for debouncing stopTyping
 
                 init() {
                     const pathSegments = window.location.pathname.split('/');
@@ -195,6 +199,17 @@
                                 this.receivedReaction = '';
                             }, 1200);
                         });
+                    });
+
+                    // Listen for typing indicators from partner
+                    this.socket.on('partnerTyping', () => {
+                        console.log("Partner started typing");
+                        this.partnerStatus = 'Partner is typing...'; // Use partnerStatus for display
+                    });
+
+                    this.socket.on('partnerStoppedTyping', () => {
+                        console.log("Partner stopped typing");
+                        this.partnerStatus = ''; // Clear the typing indicator
                     });
 
                     this.socket.on('partnerWebcamStatus', (status) => {
@@ -285,6 +300,7 @@
 
                     this.socket.on('opponentActionCompleted', () => {
                         console.log('Opponent completed their turn.');
+                        this.partnerStatus = ''; // Clear typing indicator if opponent completes turn
                         this.partnerStatus = `Partner completed the task! ✨`;
                     });
 
@@ -294,6 +310,7 @@
                             this.error = message || `Player ${disconnectedPlayerNumber} has left the room. 😢`;
                             this.turnStatus = 'Game Over';
                             this.isMyTurn = false;
+                            this.partnerStatus = ''; // Clear typing indicator on disconnect
                             this.partnerWebcamActive = false;
                             this.stopWebcam();
                             if (this.peerConnection) {
@@ -313,6 +330,7 @@
                             this.reconnectTimeout = null;
                         }
                         this.error = '';
+                        this.partnerStatus = ''; // Clear typing indicator on rejoin
                         this.turnStatus = this.isMyTurn ? '💖 Your Turn! 💖' : 'Partner\'s Turn... 🤔';
                         this.status = `Player ${playerNumber} rejoined!`;
                         if (this.webcamActive) {
@@ -339,6 +357,7 @@
                             this.error = `Connection lost (${reason}). Please refresh the page if it doesn't reconnect.`;
                             this.turnStatus = 'Connection Lost';
                             this.isMyTurn = false;
+                            this.partnerStatus = ''; // Clear typing indicator on disconnect
                             this.partnerStatus = '';
                             this.partnerWebcamActive = false;
                             this.stopWebcam();
@@ -349,6 +368,7 @@
                         console.log(`Reconnected after ${attemptNumber} attempts.`);
                         this.turnStatus = 'Reconnected. Re-joining game...';
                         this.error = '';
+                        this.partnerStatus = ''; // Clear typing indicator on reconnect
                         this.socket.emit('joinGameRoom', { roomCode: this.roomCode });
                         this.status = 'Reconnected. Please restart your webcam if needed.';
                     });
@@ -488,6 +508,7 @@
                     } else {
                         this.isMyTurn = false;
                         this.turnStatus = gameState.currentChallenge ? "Partner's Turn... 🤔" : 'Waiting...';
+                        this.partnerStatus = ''; // Clear typing indicator when turn changes
                     }
 
                     this.actionInProgress = false;
@@ -632,10 +653,13 @@
                     this.partnerStatus = '';
 
                     if (!this.webcamActive && this.textAnswer.trim()) {
+                        // Ensure stop typing is sent before submitting text
+                        this.handleStopTyping();
                         console.log('Sending text answer:', this.textAnswer);
                         this.socket.emit('sendTextAnswer', this.textAnswer);
                     } else if (this.webcamActive) {
                         console.log('Completing turn (webcam was active).');
+                        this.handleStopTyping(); // Also stop if webcam was active
                     } else {
                         console.log('Completing turn (no text answer).');
                     }
@@ -654,8 +678,26 @@
                     console.log('Sending reaction:', reaction);
                     this.socket.emit('sendReaction', reaction);
                     this.receivedTextAnswer = '';
+                    // this.partnerStatus = ''; // Removed: Don't clear partner's typing status when sending reaction
                     this.partnerStatus = 'Waiting for partner to complete their turn...';
                 },
+
+                // --- Typing Indicator Logic ---
+                handleTyping() {
+                    if (!this.isTyping) {
+                        this.isTyping = true;
+                        this.socket.emit('startTyping');
+                    }
+                    clearTimeout(this.typingTimeout);
+                    // Send stopTyping if no input for 1.5 seconds
+                    this.typingTimeout = setTimeout(this.handleStopTyping.bind(this), 1500);
+                },
+
+                handleStopTyping() {
+                    clearTimeout(this.typingTimeout);
+                    this.isTyping = false;
+                    this.socket.emit('stopTyping');
+                }
             }
         }
     </script>

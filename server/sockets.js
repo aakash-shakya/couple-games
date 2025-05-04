@@ -342,6 +342,28 @@ export function setupSocketHandlers(httpServer) {
       console.log(`Emitted gameStateUpdate to room ${room.roomCode}. Next turn: Player ${nextTurnPlayerNumber}`);
     });
 
+    // --- Typing Indicator Handlers ---
+    socket.on('startTyping', () => {
+      const room = getRoomBySocketId(socket.id);
+      if (!room) return;
+      const receiver = room.players.find(p => p.socketId !== socket.id);
+      if (receiver && receiver.socketId) {
+        // console.log(`Relaying startTyping from ${socket.id} to ${receiver.socketId}`); // Optional debug
+        io.to(receiver.socketId).emit('partnerTyping');
+      }
+    });
+
+    socket.on('stopTyping', () => {
+      const room = getRoomBySocketId(socket.id);
+      if (!room) return;
+      const receiver = room.players.find(p => p.socketId !== socket.id);
+      if (receiver && receiver.socketId) {
+        // console.log(`Relaying stopTyping from ${socket.id} to ${receiver.socketId}`); // Optional debug
+        io.to(receiver.socketId).emit('partnerStoppedTyping');
+      }
+    });
+    // --- End Typing Indicator Handlers ---
+
     socket.on('disconnect', (reason) => {
       console.log(`User disconnected: ${socket.id}, reason: ${reason}`);
       const result = removePlayer(socket.id);
@@ -349,6 +371,8 @@ export function setupSocketHandlers(httpServer) {
       if (result && result.roomCode && !result.isEmpty) {
         const remainingPlayerSocketId = result.remainingPlayerId;
         const message = `Player ${result.disconnectedPlayerNumber} has disconnected. Waiting for them to rejoin...`;
+        // Also notify the remaining player that the disconnected partner stopped typing
+        io.to(remainingPlayerSocketId).emit('partnerStoppedTyping');
         io.to(remainingPlayerSocketId).emit('playerLeft', {
           message,
           disconnectedPlayerNumber: result.disconnectedPlayerNumber
