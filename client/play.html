@@ -78,6 +78,13 @@
                         <span class="reaction-btn" @click="sendReaction('💦')">💦</span>
                         <span class="reaction-btn" @click="sendReaction('🍑')">🍑</span>
                     </div>
+                    <!-- Reaction Counts Display -->
+                    <div class="mt-3 text-xs text-purple-600 flex flex-wrap justify-center gap-x-3 gap-y-1" x-show="Object.keys(reactionCounts).length > 0">
+                        <span>Partner Reactions:</span>
+                        <template x-for="[reaction, count] in Object.entries(reactionCounts)" :key="reaction">
+                            <span x-text="`${reaction}: ${count}`"></span>
+                        </template>
+                    </div>
                 </div>
             </template>
             <template x-if="receivedReaction">
@@ -128,6 +135,7 @@
                 textAnswer: '',
                 receivedTextAnswer: '',
                 receivedReaction: '',
+                reactionCounts: {}, // <-- Add this line
                 peerConnection: null,
                 iceServers: [
                     { urls: 'stun:stun.l.google.com:19302' },
@@ -185,6 +193,10 @@
 
                     this.socket.on('receiveReaction', (reaction) => {
                         console.log('Received reaction:', reaction, 'for Player', this.playerNumber);
+                        // Increment reaction count
+                        const currentCount = this.reactionCounts[reaction] || 0;
+                        this.reactionCounts[reaction] = currentCount + 1;
+                        // Display animation
                         this.receivedReaction = reaction;
                         this.$nextTick(() => {
                             console.log('Displaying reaction:', reaction, 'in UI for Player', this.playerNumber);
@@ -671,6 +683,7 @@
                     this.turnStatus = "Waiting for next challenge...";
                     this.textAnswer = '';
                     this.receivedTextAnswer = '';
+                    // Don't reset reactionCounts here, keep the history
                     this.receivedReaction = '';
                 },
 
@@ -678,7 +691,7 @@
                     console.log('Sending reaction:', reaction);
                     this.socket.emit('sendReaction', reaction);
                     this.receivedTextAnswer = '';
-                    // this.partnerStatus = ''; // Removed: Don't clear partner's typing status when sending reaction
+                    // Keep partner status as is, sending a reaction doesn't change their turn status
                     this.partnerStatus = 'Waiting for partner to complete their turn...';
                 },
 
