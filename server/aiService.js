@@ -56,7 +56,7 @@ function getRandomStaticChallenge(gameType = 'basic', history = []) {
 
 export async function generateChallenge(gameType = 'basic', history = [], isRetry = false) {
   if (!model) {
-    console.log("AI Service disabled. Using static challenge.");
+ 
     return getRandomStaticChallenge(gameType);
   }
 
@@ -79,7 +79,7 @@ export async function generateChallenge(gameType = 'basic', history = [], isRetr
   }
 
   try {
-    console.log(`Requesting ${gameType} challenge from AI (Retry: ${isRetry})...`);
+ 
     const result = await model.generateContent({
       contents: [{ role: "user", parts: [{ text: fullPrompt }] }],
       generationConfig: {
@@ -94,7 +94,7 @@ export async function generateChallenge(gameType = 'basic', history = [], isRetr
       console.warn("AI returned empty content, falling back to static.");
       return getRandomStaticChallenge(gameType, history); // Pass history to static fallback
     }
-    console.log(`AI generated: ${text}`);
+ 
     return text;
   } catch (err) {
     // Log the specific error from the API if available
@@ -102,7 +102,7 @@ export async function generateChallenge(gameType = 'basic', history = [], isRetr
     if (err.response && err.response.data) {
       console.error("API Error Details:", err.response.data);
     }
-    console.log("Falling back to static challenge.");
+ 
     return getRandomStaticChallenge(gameType, history); // Pass history to static fallback
   }
 }

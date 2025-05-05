@@ -51,6 +51,15 @@
             }
         }
     </style>
+    <!-- Google tag (gtag.js) -->
+    <script async src="https://www.googletagmanager.com/gtag/js?id=G-VH4YGM44FE"></script>
+    <script>
+      window.dataLayer = window.dataLayer || [];
+      function gtag(){dataLayer.push(arguments);}
+      gtag('js', new Date());
+
+      gtag('config', 'G-VH4YGM44FE');
+    </script>
 </head>
 
 <body class="flex flex-col items-center justify-center min-h-screen p-4 text-purple-900" x-data="createRoom()">
@@ -132,14 +141,14 @@
                     this.socket = io();
 
                     this.socket.on('connect', () => {
-                        console.log('Connected to server');
+ 
                         this.status = 'Connected. Ready to create room.';
                         this.error = '';
                         this.isLoading = false;
                     });
 
                     this.socket.on('roomCreated', ({ roomCode, playerNumber }) => {
-                        console.log('Room created:', roomCode);
+ 
                         this.roomCode = roomCode;
                         this.playerNumber = playerNumber;
                         this.status = 'Room created! Waiting for partner...';
@@ -149,7 +158,7 @@
 
                     this.socket.on('gameReady', ({ roomCode: serverRoomCode }) => {
                         if (this.roomCode === serverRoomCode) {
-                            console.log('Partner joined! Game is ready.');
+ 
                             this.status = 'Partner joined! Choose a game type.';
                             this.gameReady = true;
                             this.isLoading = false;
@@ -157,7 +166,7 @@
                     });
 
                     this.socket.on('gameStarted', ({ gameType }) => {
-                        console.log(`Game started with type: ${gameType}`);
+ 
                         this.isLoading = false;
                         setTimeout(() => {
                             window.location.href = `/play/${this.roomCode}`;
@@ -172,7 +181,7 @@
                     });
 
                     this.socket.on('disconnect', () => {
-                        console.log('Disconnected from server');
+ 
                         this.error = 'Disconnected. Please refresh.';
                         this.status = '';
                         this.roomCode = null;
@@ -206,7 +215,7 @@
                 },
                 startGame(gameType) {
                     if (!this.roomCode || !this.gameReady) return;
-                    console.log(`Requesting to start game type: ${gameType}`);
+ 
                     this.isLoading = true;
                     this.selectedGameType = gameType;
                     this.status = `Starting ${gameType} game...`;

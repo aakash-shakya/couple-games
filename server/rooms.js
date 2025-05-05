@@ -26,7 +26,7 @@ function expireRoom(roomCode) {
         // Double-check if a player reconnected just before expiry
         const activePlayer = room.players.find(p => p.socketId !== null);
         if (activePlayer) {
-            console.log(`Room ${roomCode} expiry cancelled, player ${activePlayer.playerNumber} (${activePlayer.socketId}) seems active.`);
+ 
             resetRoomTimer(room, ROOM_EXPIRY_TIME); // Reset to full timer
             return; // Don't expire
         }
@@ -34,7 +34,7 @@ function expireRoom(roomCode) {
         // Proceed with expiry if no active players found
         clearTimeout(room.timer); // Ensure timer is cleared before deleting
         rooms.delete(roomCode);
-        console.log(`Room ${roomCode} expired and removed.`);
+ 
     } else {
         // console.log(`ExpireRoom called for non-existent room: ${roomCode}`); // Optional debug
     }
@@ -62,7 +62,7 @@ export function createRoom(initialSocketId) {
         timer: null,
     };
     rooms.set(roomCode, roomData);
-    console.log(`Room created: ${roomCode} by Player 1 (${initialSocketId})`);
+ 
     resetRoomTimer(roomData, ROOM_EXPIRY_TIME); // Start expiry timer
     return roomData;
 }
@@ -89,7 +89,7 @@ export function joinRoom(roomCode, socketId) {
         player2.socketId = socketId;
         player2.joinedGameScreen = false; // Ensure flag is reset on lobby join/rejoin
         resetRoomTimer(room, ROOM_EXPIRY_TIME); // Reset expiry timer
-        console.log(`Player 2 (${socketId}) joined room ${roomCode} lobby.`);
+ 
         return { room };
     }
 
@@ -119,7 +119,7 @@ export function updatePlayerSocket(roomCode, playerNumber, newSocketId) {
     const playerSlot = room.players.find(p => p.playerNumber === playerNumber);
     if (!playerSlot) return { error: `Player number ${playerNumber} not found in room ${roomCode}` };
 
-    console.log(`Updating socket for Player ${playerNumber} in room ${roomCode} from ${playerSlot.socketId} to ${newSocketId}`);
+ 
     playerSlot.socketId = newSocketId;
     playerSlot.joinedGameScreen = true; // Mark as successfully joined the game screen
     resetRoomTimer(room, ROOM_EXPIRY_TIME); // *** Use full expiry time here ***
@@ -146,7 +146,7 @@ export function removePlayer(socketId) {
 
         if (playerIndex !== -1) {
             const playerNumber = room.players[playerIndex].playerNumber;
-            console.log(`Player ${playerNumber} (${socketId}) disconnected from room ${roomCode}.`);
+ 
 
             // Nullify socket and mark as not joined
             room.players[playerIndex].socketId = null;
@@ -158,7 +158,7 @@ export function removePlayer(socketId) {
                 // *** CHANGE: Don't expire immediately ***
                 // Both players appear disconnected. Set a SHORT timer.
                 // If they don't rejoin via joinGameRoom quickly, it will expire.
-                console.log(`Room ${roomCode} appears empty. Setting short expiry timer (${SHORT_EXPIRY_TIME}ms).`);
+ 
                 resetRoomTimer(room, SHORT_EXPIRY_TIME); // Use short expiry
                 // Indicate potentially empty, but room still exists for now
                 return { roomCode, isEmpty: false, potentiallyEmpty: true };
@@ -178,7 +178,7 @@ export function updateGameState(roomCode, newState) {
         // Merge the new state into the existing game state
         room.gameState = { ...room.gameState, ...newState };
         resetRoomTimer(room, ROOM_EXPIRY_TIME); // Reset expiry timer on activity
-        console.log(`Game state updated for room ${roomCode}:`, newState);
+ 
     } else {
         console.warn(`Attempted to update state for non-existent room: ${roomCode}`);
     }

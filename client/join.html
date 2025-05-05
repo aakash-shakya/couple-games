@@ -14,6 +14,15 @@
          .cursive { font-family: 'Pacifico', cursive; }
     </style>
 </head>
+<!-- Google tag (gtag.js) -->
+<script async src="https://www.googletagmanager.com/gtag/js?id=G-VH4YGM44FE"></script>
+<script>
+  window.dataLayer = window.dataLayer || [];
+  function gtag(){dataLayer.push(arguments);}
+  gtag('js', new Date());
+
+  gtag('config', 'G-VH4YGM44FE');
+</script>
 <body class="flex flex-col items-center justify-center min-h-screen p-4 text-purple-900"
       x-data="joinRoom()">
 
@@ -51,13 +60,13 @@
                     this.socket = io();
 
                     this.socket.on('connect', () => {
-                        console.log('Connected to server');
+ 
                         this.status = 'Connected. Enter room code.';
                         this.error = '';
                     });
 
                     this.socket.on('joined', ({ roomCode, playerNumber }) => {
-                        console.log(`Successfully joined room ${roomCode} as Player ${playerNumber}`);
+ 
                         this.joining = false;
                         this.playerNumber = playerNumber;
                         this.joinedRoomCode = roomCode;
@@ -67,7 +76,7 @@
                     });
 
                      this.socket.on('gameStarted', ({ gameType }) => {
-                        console.log(`Game started by Player 1 with type: ${gameType}`);
+ 
                         // Delay navigation to the play screen to ensure room readiness
                         if (this.joinedRoomCode) {
                             setTimeout(() => {
@@ -87,7 +96,7 @@
                     });
 
                     this.socket.on('disconnect', () => {
-                        console.log('Disconnected from server');
+ 
                         this.error = 'Disconnected. Please refresh.';
                         this.status = '';
                         this.joining = false;

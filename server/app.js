@@ -43,6 +43,6 @@ app.get('/play/:roomCode', (req, res) => {
 
 
 server.listen(PORT, () => {
-  console.log(`💖 LoverPlay Server listening on port ${PORT}`);
-  console.log(`🔗 Access the game at http://localhost:${PORT}`);
+ 
+ 
 });
