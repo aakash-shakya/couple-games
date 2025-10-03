@@ -256,14 +256,28 @@
                     });
 
                     this.socket.on('offer', async ({ sdp }) => {
- 
+                        console.log('Received offer from partner');
+                        
                         if (!this.peerConnection) {
+                            console.log('No peer connection, creating one...');
                             this.initPeerConnection();
                         }
+                        
                         try {
+                            // Check signaling state before setting remote description
+                            const signalingState = this.peerConnection.signalingState;
+                            console.log(`Current signaling state: ${signalingState}`);
+                            
+                            // If we're in the middle of setting local description, wait
+                            if (signalingState === 'have-local-offer') {
+                                console.log('Already have local offer, rolling back...');
+                                await this.peerConnection.setLocalDescription({type: 'rollback'});
+                            }
+                            
                             await this.peerConnection.setRemoteDescription(new RTCSessionDescription(sdp));
- 
+                            console.log('Remote description set successfully');
 
+                            // Add local tracks if we have them
                             if (this.localStream) {
                                 const existingSenders = this.peerConnection.getSenders().map(sender => sender.track?.id);
                                 this.localTrackSenders = [];
@@ -271,23 +285,23 @@
                                     if (!existingSenders.includes(track.id)) {
                                         try {
                                             this.localTrackSenders.push(this.peerConnection.addTrack(track, this.localStream));
- 
+                                            console.log(`Added ${track.kind} track to peer connection`);
                                         } catch (err) {
                                             console.error('Error adding track on offer:', err);
                                         }
-                                    } else {
- 
                                     }
                                 });
                             }
 
                             const answer = await this.peerConnection.createAnswer();
                             await this.peerConnection.setLocalDescription(answer);
- 
+                            console.log('Created and set answer');
+                            
                             this.socket.emit('answer', { sdp: answer });
+                            console.log('Sent answer to partner');
                         } catch (err) {
                             console.error('Error handling offer:', err);
-                            this.error = 'Failed to process video call offer.';
+                            this.error = 'Failed to process video call offer. Try restarting webcam.';
                         }
                     });
 
@@ -443,6 +457,12 @@
                         };
 
                         this.peerConnection.onnegotiationneeded = async () => {
+                            // Only Player 1 initiates offers to prevent race conditions
+                            if (this.playerNumber !== 1) {
+                                console.log('Player 2 ignoring negotiationneeded - waiting for offer from Player 1');
+                                return;
+                            }
+                            
                             if (this.negotiationPending) {
  
                                 return;
@@ -474,12 +494,39 @@
                         };
 
                         this.peerConnection.onconnectionstatechange = () => {
- 
+                            console.log(`WebRTC connection state: ${this.peerConnection.connectionState}`);
+                            
                             if (this.peerConnection.connectionState === 'failed') {
-                                this.error = 'WebRTC connection failed. Try restarting webcam.';
+                                console.warn('WebRTC connection failed. Attempting to recover...');
                                 this.partnerWebcamActive = false;
+                                
+                                // Attempt automatic recovery
+                                if (this.webcamActive && this.playerNumber === 1) {
+                                    console.log('Player 1 attempting to restart ICE and renegotiate...');
+                                    this.peerConnection.restartIce();
+                                    // Force renegotiation after a short delay
+                                    setTimeout(async () => {
+                                        if (this.peerConnection && this.peerConnection.connectionState !== 'connected') {
+                                            try {
+                                                this.negotiationPending = false;
+                                                const offer = await this.peerConnection.createOffer({ iceRestart: true });
+                                                await this.peerConnection.setLocalDescription(offer);
+                                                this.socket.emit('offer', { sdp: this.peerConnection.localDescription });
+                                                console.log('Sent ICE restart offer');
+                                            } catch (err) {
+                                                console.error('Failed to restart ICE:', err);
+                                                this.error = 'WebRTC connection failed. Please restart your webcam.';
+                                            }
+                                        }
+                                    }, 1000);
+                                } else {
+                                    this.error = 'Connection issue. Partner is reconnecting...';
+                                }
                             } else if (this.peerConnection.connectionState === 'connected') {
- 
+                                console.log('WebRTC fully connected!');
+                                this.error = '';
+                            } else if (this.peerConnection.connectionState === 'connecting') {
+                                console.log('WebRTC connecting...');
                                 this.error = '';
                             }
                         };
