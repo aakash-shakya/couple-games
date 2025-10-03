@@ -61,12 +61,20 @@
                 </div>
             </div>
         </div>
-        <button @click="toggleWebcam"
-                class="mb-4 px-4 py-2 text-sm rounded-full transition duration-300"
-                :class="webcamActive ? 'bg-red-500 hover:bg-red-600 text-white' : 'bg-blue-500 hover:bg-blue-600 text-white'">
-            <span x-show="!webcamActive">📷 Start Webcam</span>
-            <span x-show="webcamActive">🚫 Stop Webcam</span>
-        </button>
+        <div class="flex gap-2 justify-center items-center mb-4">
+            <button @click="toggleWebcam"
+                    class="px-4 py-2 text-sm rounded-full transition duration-300"
+                    :class="webcamActive ? 'bg-red-500 hover:bg-red-600 text-white' : 'bg-blue-500 hover:bg-blue-600 text-white'">
+                <span x-show="!webcamActive">📷 Start Webcam</span>
+                <span x-show="webcamActive">🚫 Stop Webcam</span>
+            </button>
+            <button @click="switchCamera"
+                    x-show="webcamActive"
+                    class="px-4 py-2 text-sm rounded-full bg-purple-500 hover:bg-purple-600 text-white transition duration-300"
+                    title="Switch between front and rear camera">
+                🔄 <span x-text="cameraFacingMode === 'environment' ? 'Front' : 'Rear'"></span>
+            </button>
+        </div>
         <div class="border-t border-b border-purple-200 py-6 my-6 min-h-[100px]">
             <h2 class="text-2xl font-semibold mb-3" x-text="turnStatus">Connecting...</h2>
             <div id="challenge-text" class="text-lg text-purple-800 fade-in" x-html="currentChallenge"></div>
@@ -141,6 +149,7 @@
                 webcamActive: false,
                 localStream: null,
                 partnerWebcamActive: false,
+                cameraFacingMode: 'environment', // Start with rear camera
                 textAnswer: '',
                 receivedTextAnswer: '',
                 receivedReaction: '',
@@ -576,8 +585,50 @@
                         console.warn("Webcam already active.");
                         return;
                     }
+                    
+                    // Try to get the camera based on current facing mode, with fallback
+                    let constraints = {
+                        video: {
+                            facingMode: { exact: this.cameraFacingMode }  // Try exact mode first
+                        },
+                        audio: true
+                    };
+                    
                     try {
-                        this.localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+                        // First attempt: Try to use exact facing mode
+                        console.log(`Attempting to access ${this.cameraFacingMode} camera...`);
+                        this.localStream = await navigator.mediaDevices.getUserMedia(constraints);
+                        console.log(`Successfully accessed ${this.cameraFacingMode} camera`);
+                    } catch (err) {
+                        console.warn(`${this.cameraFacingMode} camera not available or failed:`, err.name, err.message);
+                        
+                        // Handle OverconstrainedError or NotFoundError - fallback to preferred
+                        if (err.name === 'OverconstrainedError' || err.name === 'NotFoundError') {
+                            console.log('Falling back to preferred camera...');
+                            try {
+                                // Fallback: Try with ideal (preferred but not required)
+                                constraints = {
+                                    video: {
+                                        facingMode: this.cameraFacingMode  // Prefer selected mode, but allow fallback
+                                    },
+                                    audio: true
+                                };
+                                this.localStream = await navigator.mediaDevices.getUserMedia(constraints);
+                                console.log('Successfully accessed camera with relaxed constraints');
+                            } catch (fallbackErr) {
+                                console.warn('Fallback to preferred camera failed, trying basic constraints...');
+                                // Final fallback: Use any available camera
+                                constraints = { video: true, audio: true };
+                                this.localStream = await navigator.mediaDevices.getUserMedia(constraints);
+                                console.log('Successfully accessed default camera');
+                            }
+                        } else {
+                            // For other errors (permissions, etc.), re-throw
+                            throw err;
+                        }
+                    }
+                    
+                    try {
                         const localVideo = document.getElementById('localVideo');
                         localVideo.srcObject = this.localStream;
                         this.webcamActive = true;
@@ -586,7 +637,16 @@
 
                         const videoTracks = this.localStream.getVideoTracks();
                         const audioTracks = this.localStream.getAudioTracks();
- 
+                        
+                        // Log which camera is being used (helpful for debugging)
+                        if (videoTracks.length > 0) {
+                            const settings = videoTracks[0].getSettings();
+                            console.log('Camera settings:', {
+                                facingMode: settings.facingMode,
+                                deviceId: settings.deviceId,
+                                label: videoTracks[0].label
+                            });
+                        }
  
                         if (audioTracks.length === 0) {
                             console.warn('No audio tracks available. Microphone may be disabled or permissions denied.');
@@ -664,6 +724,28 @@
                     }
 
  
+                },
+
+                async switchCamera() {
+                    if (!this.webcamActive) {
+                        console.warn('Camera not active, cannot switch.');
+                        return;
+                    }
+                    
+                    console.log('Switching camera...');
+                    
+                    // Toggle between front (user) and rear (environment) camera
+                    this.cameraFacingMode = this.cameraFacingMode === 'environment' ? 'user' : 'environment';
+                    console.log(`Switching to ${this.cameraFacingMode} camera`);
+                    
+                    // Stop current webcam and restart with new camera
+                    this.stopWebcam();
+                    
+                    // Small delay to ensure cleanup completes
+                    await new Promise(resolve => setTimeout(resolve, 300));
+                    
+                    // Start webcam with new facing mode
+                    await this.startWebcam();
                 },
 
                 performAction() {
