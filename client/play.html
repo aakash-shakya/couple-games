@@ -164,6 +164,10 @@
                 reconnectTimeout: null,
                 isTyping: false, // Track if the current user is typing
                 typingTimeout: null, // Timeout handle for debouncing stopTyping
+                iceCandidateBuffer: [], // Buffer for ICE candidates received before peer connection ready
+                webcamOperationInProgress: false, // Lock for webcam operations
+                cameraSwitching: false, // Lock for camera switch operations
+                connectionTimeout: null, // Timeout for WebRTC connection
 
                 init() {
                     const pathSegments = window.location.pathname.split('/');
@@ -268,14 +272,35 @@
                             const signalingState = this.peerConnection.signalingState;
                             console.log(`Current signaling state: ${signalingState}`);
                             
-                            // If we're in the middle of setting local description, wait
+                            // If we're in the middle of setting local description, rollback
                             if (signalingState === 'have-local-offer') {
                                 console.log('Already have local offer, rolling back...');
-                                await this.peerConnection.setLocalDescription({type: 'rollback'});
+                                try {
+                                    await this.peerConnection.setLocalDescription({type: 'rollback'});
+                                    console.log('Rollback successful');
+                                } catch (rollbackErr) {
+                                    console.warn('Rollback failed, continuing anyway:', rollbackErr.message);
+                                    // Continue even if rollback fails - remote description might override
+                                }
                             }
                             
                             await this.peerConnection.setRemoteDescription(new RTCSessionDescription(sdp));
                             console.log('Remote description set successfully');
+
+                            // Process any buffered ICE candidates now that remote description is set
+                            if (this.iceCandidateBuffer.length > 0) {
+                                console.log(`Processing ${this.iceCandidateBuffer.length} buffered ICE candidates`);
+                                for (const candidate of this.iceCandidateBuffer) {
+                                    try {
+                                        await this.peerConnection.addIceCandidate(new RTCIceCandidate(candidate));
+                                        console.log('Added buffered ICE candidate');
+                                    } catch (err) {
+                                        console.error('Error adding buffered ICE candidate:', err);
+                                    }
+                                }
+                                this.iceCandidateBuffer = [];
+                                console.log('Finished processing buffered ICE candidates');
+                            }
 
                             // Add local tracks if we have them
                             if (this.localStream) {
@@ -306,13 +331,30 @@
                     });
 
                     this.socket.on('answer', async ({ sdp }) => {
- 
+                        console.log('Received answer from partner');
+                        
                         if (!this.peerConnection) {
                             console.error('Received answer but no peer connection exists!');
                             return;
                         }
                         try {
                             await this.peerConnection.setRemoteDescription(new RTCSessionDescription(sdp));
+                            console.log('Remote description (answer) set successfully');
+                            
+                            // Process any buffered ICE candidates now that remote description is set
+                            if (this.iceCandidateBuffer.length > 0) {
+                                console.log(`Processing ${this.iceCandidateBuffer.length} buffered ICE candidates`);
+                                for (const candidate of this.iceCandidateBuffer) {
+                                    try {
+                                        await this.peerConnection.addIceCandidate(new RTCIceCandidate(candidate));
+                                        console.log('Added buffered ICE candidate');
+                                    } catch (err) {
+                                        console.error('Error adding buffered ICE candidate:', err);
+                                    }
+                                }
+                                this.iceCandidateBuffer = [];
+                                console.log('Finished processing buffered ICE candidates');
+                            }
  
                             if (this.negotiationPending) {
                                 this.negotiationPending = false;
@@ -325,26 +367,39 @@
                     });
 
                     this.socket.on('iceCandidate', async ({ candidate }) => {
- 
+                        console.log('Received ICE candidate from partner');
+                        
                         if (!this.peerConnection) {
-                            console.warn('Received ICE candidate but no peer connection exists yet.');
+                            console.warn('Received ICE candidate but no peer connection exists yet. Buffering...');
+                            this.iceCandidateBuffer.push(candidate);
+                            console.log(`Buffered ICE candidate (${this.iceCandidateBuffer.length} total)`);
                             return;
                         }
+                        
                         try {
                             if (candidate) {
-                                await this.peerConnection.addIceCandidate(new RTCIceCandidate(candidate));
- 
+                                // Check if we can add the candidate (need remote description)
+                                if (this.peerConnection.remoteDescription && this.peerConnection.remoteDescription.type) {
+                                    await this.peerConnection.addIceCandidate(new RTCIceCandidate(candidate));
+                                    console.log('Added ICE candidate');
+                                } else {
+                                    console.warn('Remote description not set yet, buffering ICE candidate');
+                                    this.iceCandidateBuffer.push(candidate);
+                                }
                             }
                         } catch (err) {
                             if (!err.message.includes("remote description is not set")) {
                                 console.error('Error adding ICE candidate:', err);
+                            } else {
+                                // Buffer if remote description not ready
+                                this.iceCandidateBuffer.push(candidate);
+                                console.log('Buffered ICE candidate due to timing');
                             }
                         }
                     });
 
                     this.socket.on('opponentActionCompleted', () => {
- 
-                        this.partnerStatus = ''; // Clear typing indicator if opponent completes turn
+                        console.log('Partner completed their action');
                         this.partnerStatus = `Partner completed the task! ✨`;
                     });
 
@@ -396,13 +451,13 @@
                     });
 
                     this.socket.on('disconnect', (reason) => {
- 
+                        console.log(`Socket disconnected: ${reason}`);
+                        
                         if (this.turnStatus !== 'Game Over') {
                             this.error = `Connection lost (${reason}). Please refresh the page if it doesn't reconnect.`;
                             this.turnStatus = 'Connection Lost';
                             this.isMyTurn = false;
                             this.partnerStatus = ''; // Clear typing indicator on disconnect
-                            this.partnerStatus = '';
                             this.partnerWebcamActive = false;
                             this.stopWebcam();
                         }
@@ -496,6 +551,12 @@
                         this.peerConnection.onconnectionstatechange = () => {
                             console.log(`WebRTC connection state: ${this.peerConnection.connectionState}`);
                             
+                            // Clear any existing connection timeout
+                            if (this.connectionTimeout) {
+                                clearTimeout(this.connectionTimeout);
+                                this.connectionTimeout = null;
+                            }
+                            
                             if (this.peerConnection.connectionState === 'failed') {
                                 console.warn('WebRTC connection failed. Attempting to recover...');
                                 this.partnerWebcamActive = false;
@@ -528,6 +589,24 @@
                             } else if (this.peerConnection.connectionState === 'connecting') {
                                 console.log('WebRTC connecting...');
                                 this.error = '';
+                                
+                                // Set timeout for connection attempt (30 seconds)
+                                this.connectionTimeout = setTimeout(() => {
+                                    if (this.peerConnection && this.peerConnection.connectionState === 'connecting') {
+                                        console.error('WebRTC connection timeout after 30 seconds');
+                                        this.error = 'Connection timeout. Please restart your webcam.';
+                                        this.partnerWebcamActive = false;
+                                        
+                                        // Attempt recovery
+                                        if (this.playerNumber === 1 && this.webcamActive) {
+                                            console.log('Attempting recovery after timeout...');
+                                            this.peerConnection.restartIce();
+                                        }
+                                    }
+                                }, 30000); // 30 second timeout
+                            } else if (this.peerConnection.connectionState === 'disconnected') {
+                                console.warn('WebRTC disconnected, may reconnect automatically');
+                                this.partnerWebcamActive = false;
                             }
                         };
 
@@ -602,8 +681,18 @@
                             return 'Waiting for the game to start...';
                         }
                     }
-                    let escaped = text.replace(/</g, '<').replace(/>/g, '>');
+                    // Properly escape HTML to prevent XSS
+                    let escaped = text
+                        .replace(/&/g, '&amp;')
+                        .replace(/</g, '&lt;')
+                        .replace(/>/g, '&gt;')
+                        .replace(/"/g, '&quot;')
+                        .replace(/'/g, '&#039;');
+                    
+                    // Now safely apply markdown-like formatting (bold with **)
                     escaped = escaped.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+                    
+                    // Replace newlines with <br>
                     return escaped.replace(/\n/g, '<br>');
                 },
 
@@ -633,6 +722,36 @@
                         return;
                     }
                     
+                    // Lock to prevent concurrent webcam operations
+                    if (this.webcamOperationInProgress) {
+                        console.warn("Webcam operation already in progress, please wait...");
+                        return;
+                    }
+                    this.webcamOperationInProgress = true;
+                    
+                    // CRITICAL: Wait for player number to be assigned before WebRTC operations
+                    if (!this.playerNumber) {
+                        console.warn('Player number not yet assigned, waiting...');
+                        this.status = 'Connecting to game...';
+                        
+                        // Wait up to 5 seconds for player number to be assigned
+                        let attempts = 0;
+                        while (!this.playerNumber && attempts < 50) {
+                            await new Promise(resolve => setTimeout(resolve, 100));
+                            attempts++;
+                        }
+                        
+                        if (!this.playerNumber) {
+                            this.error = 'Failed to join game properly. Please refresh and try again.';
+                            console.error('Player number not assigned after 5 seconds');
+                            this.webcamOperationInProgress = false;
+                            return;
+                        }
+                        
+                        console.log(`Player number assigned: ${this.playerNumber}`);
+                        this.status = '';
+                    }
+                
                     // Try to get the camera based on current facing mode, with fallback
                     let constraints = {
                         video: {
@@ -728,18 +847,29 @@
                         }
 
                         this.socket.emit('webcamStatus', { active: true });
-
  
+                        // Unlock webcam operation
+                        this.webcamOperationInProgress = false;
+                        console.log('Webcam started successfully');
 
                     } catch (err) {
                         console.error("Error accessing webcam/WebRTC:", err);
                         this.error = `Could not access webcam or microphone (${err.name}). Please check permissions.`;
                         this.webcamActive = false;
-                        this.localStream = null;
+                        
+                        // Properly stop any tracks that may have been created
+                        if (this.localStream) {
+                            this.localStream.getTracks().forEach(track => track.stop());
+                            this.localStream = null;
+                        }
+                        
                         if (this.peerConnection && !this.localTrackSenders.length) {
                             this.peerConnection.close();
                             this.peerConnection = null;
                         }
+                        
+                        // Unlock webcam operation
+                        this.webcamOperationInProgress = false;
                     }
                 },
 
@@ -779,20 +909,100 @@
                         return;
                     }
                     
+                    // Lock to prevent concurrent camera switches
+                    if (this.cameraSwitching) {
+                        console.warn('Camera switch already in progress');
+                        return;
+                    }
+                    
+                    this.cameraSwitching = true;
                     console.log('Switching camera...');
                     
-                    // Toggle between front (user) and rear (environment) camera
-                    this.cameraFacingMode = this.cameraFacingMode === 'environment' ? 'user' : 'environment';
-                    console.log(`Switching to ${this.cameraFacingMode} camera`);
-                    
-                    // Stop current webcam and restart with new camera
-                    this.stopWebcam();
-                    
-                    // Small delay to ensure cleanup completes
-                    await new Promise(resolve => setTimeout(resolve, 300));
-                    
-                    // Start webcam with new facing mode
-                    await this.startWebcam();
+                    try {
+                        // Determine new camera mode
+                        const newFacingMode = this.cameraFacingMode === 'environment' ? 'user' : 'environment';
+                        console.log(`Switching to ${newFacingMode} camera`);
+                        
+                        // Get new camera stream with exact constraint first, then fallback
+                        let newStream;
+                        try {
+                            const constraints = {
+                                video: { facingMode: { exact: newFacingMode } },
+                                audio: true
+                            };
+                            newStream = await navigator.mediaDevices.getUserMedia(constraints);
+                            console.log(`Got ${newFacingMode} camera stream`);
+                        } catch (err) {
+                            console.warn(`Exact ${newFacingMode} camera failed, trying preferred...`);
+                            // Fallback to preferred (not exact)
+                            const constraints = {
+                                video: { facingMode: newFacingMode },
+                                audio: true
+                            };
+                            newStream = await navigator.mediaDevices.getUserMedia(constraints);
+                            console.log('Got camera with relaxed constraints');
+                        }
+                        
+                        // Update local video element
+                        const localVideo = document.getElementById('localVideo');
+                        if (localVideo) {
+                            localVideo.srcObject = newStream;
+                        }
+                        
+                        // Replace tracks in peer connection using replaceTrack() for seamless switching
+                        if (this.peerConnection && this.localTrackSenders.length > 0) {
+                            const newVideoTrack = newStream.getVideoTracks()[0];
+                            const newAudioTrack = newStream.getAudioTracks()[0];
+                            
+                            // Replace video track
+                            const videoSender = this.localTrackSenders.find(s => s.track && s.track.kind === 'video');
+                            if (videoSender && newVideoTrack) {
+                                await videoSender.replaceTrack(newVideoTrack);
+                                console.log('Replaced video track (seamless switch, no renegotiation)');
+                            }
+                            
+                            // Replace audio track
+                            const audioSender = this.localTrackSenders.find(s => s.track && s.track.kind === 'audio');
+                            if (audioSender && newAudioTrack) {
+                                await audioSender.replaceTrack(newAudioTrack);
+                                console.log('Replaced audio track');
+                            }
+                        }
+                        
+                        // Stop old stream tracks
+                        if (this.localStream) {
+                            this.localStream.getTracks().forEach(track => {
+                                track.stop();
+                                console.log(`Stopped old ${track.kind} track`);
+                            });
+                        }
+                        
+                        // Update to new stream and camera mode
+                        this.localStream = newStream;
+                        this.cameraFacingMode = newFacingMode;
+                        
+                        console.log('Camera switched successfully!');
+                        this.error = ''; // Clear any previous errors
+                        
+                    } catch (err) {
+                        console.error('Failed to switch camera:', err);
+                        this.error = `Failed to switch camera: ${err.name}. Try stopping and restarting webcam.`;
+                        
+                        // Attempt recovery by restarting webcam
+                        console.log('Attempting to recover by restarting webcam...');
+                        try {
+                            this.stopWebcam();
+                            await new Promise(resolve => setTimeout(resolve, 500));
+                            this.webcamOperationInProgress = false; // Unlock before restart
+                            await this.startWebcam();
+                        } catch (recoveryErr) {
+                            console.error('Recovery failed:', recoveryErr);
+                            this.error = 'Camera switch failed and could not recover. Please restart webcam manually.';
+                        }
+                    } finally {
+                        // Always unlock camera switch
+                        this.cameraSwitching = false;
+                    }
                 },
 
                 performAction() {
